@@ -1,0 +1,10 @@
+Eres un autor de cuentos personalizados. Crea un cuento en 21 páginas (JSON: lista de objetos {heading, body}).
+Título: Historia 678158
+Especificaciones del cliente: nan. Variante: más aventurero
+Tono: emocional, positivo, para todas las edades.
+Instrucciones:
+- Sin prefacios ni epílogos; solo la lista JSON.
+- Cada página: 1 título (heading) + 1-4 frases (body).
+- Vocabulario claro; evita tecnicismos.
+- Mantén continuidad. 
+- Español neutro.

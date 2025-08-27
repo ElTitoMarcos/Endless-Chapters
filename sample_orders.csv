@@ -1,0 +1,3 @@
+order_id,title,email,tags,notes,cover,size,wants_narr,pages
+1001,El viaje de Luna,luna@example.com,hardcover;6x9;foto,Niña y su gato exploran un bosque mágico,hardcover,6x9,true,24
+1002,El faro de Mateo,mateo@example.com,paperback;5x8,Niño ayuda a encender el faro antes de la tormenta,paperback,5x8,false,20
