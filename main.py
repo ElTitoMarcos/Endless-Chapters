@@ -365,7 +365,7 @@ def render_downloads() -> None:
             path = Path(d['zip']).name
             with ui.row():
                 ui.label(f"Pedido {d['order']}")
-                ui.button('Descargar ZIP', on_click=lambda p=path: ui.open(f'/downloads/{p}'))
+                ui.button('Descargar ZIP', on_click=lambda p=path: ui.download(f'/downloads/{p}'))
 @ui.page('/')
 def main_page() -> None:
     global table, download_container
@@ -385,7 +385,7 @@ def main_page() -> None:
     with ui.header().classes('items-center justify-between'):
         with ui.row():
             ui.button('GENERAR SELECCIONADOS', on_click=generate_selected)
-            ui.button('EXPORTAR CSV', on_click=lambda: ui.open('/api/export.csv'))
+            ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
             ui.button('Cargar pedidos de prueba', on_click=load_sample_orders)
 
