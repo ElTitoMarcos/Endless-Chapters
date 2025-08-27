@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import csv
 import json
 import logging
@@ -152,7 +153,6 @@ def db_upsert_order(order: Order, items: list[Item]) -> str:
     conn.commit()
     conn.close()
     return order.id
-
 
 def db_list_orders() -> list[sqlite3.Row]:
     conn = db_connect()
@@ -461,32 +461,38 @@ def generate_one(order_id: str, dialog: ui.dialog) -> None:
         ui.notify('Error al generar', type='negative')
     dialog.close()
 
+@ui.page('/')
 
 def page_list_orders() -> None:
     global selected_orders
     selected_orders = []
     rows = [dict(r) for r in db_list_orders()]
     columns = [
-        {'name':'select','label':'','field':'id','sortable':False},
-        {'name':'order_number','label':'Pedido','field':'order_number'},
-        {'name':'client','label':'Cliente','field':'client'},
-        {'name':'pages','label':'Páginas','field':'pages'},
-        {'name':'status','label':'Status','field':'status'},
+        {'name': 'select', 'label': '', 'field': 'id', 'sortable': False},
+        {'name': 'order_number', 'label': 'Pedido', 'field': 'order_number'},
+        {'name': 'client', 'label': 'Cliente', 'field': 'client'},
+        {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
+        {'name': 'status', 'label': 'Status', 'field': 'status'},
     ]
     def on_selection(e: dict) -> None:
         selected_orders[:] = e.get('selection', [])
+
     def on_row_click(e: dict) -> None:
         show_order_dialog(e['row']['id'])
-    with ui.page('/'):  # home
-        with ui.row().classes('items-center'):
-            ui.button('Generar seleccionados', on_click=lambda: generate_selected())
-            ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
-            ui.button('Refrescar', on_click=lambda: ui.open('/'))
-        ui.table(columns=columns, rows=rows, row_key='id',
-                 selection='multiple', on_select=on_selection,
-                 on_row_click=on_row_click)
-        import_block()
 
+    with ui.row().classes('items-center'):
+        ui.button('Generar seleccionados', on_click=lambda: generate_selected())
+        ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
+        ui.button('Refrescar', on_click=lambda: ui.open('/'))
+    ui.table(
+        columns=columns,
+        rows=rows,
+        row_key='id',
+        selection='multiple',
+        on_select=on_selection,
+        on_row_click=on_row_click,
+    )
+    import_block()
 
 def generate_selected() -> None:
     if not selected_orders:
@@ -498,24 +504,18 @@ def generate_selected() -> None:
     except Exception as e:
         ui.notify(f'Error: {e}', type='negative')
 
-
 # descargas page
 
+@ui.page('/descargas')
 def page_downloads() -> None:
     files = sorted(DOWNLOAD_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
-    with ui.page('/descargas'):
-        ui.label('Descargas').classes('text-lg')
-        for f in files:
-            with ui.row():
-                ui.button(f.name, on_click=lambda f=f: ui.open(f'/static/downloads/{f.name}'))
-                ui.label(datetime.fromtimestamp(f.stat().st_mtime).isoformat())
-                ui.label(f'{f.stat().st_size} bytes')
-                ui.button('Borrar', on_click=lambda f=f: (f.unlink(), ui.open('/descargas')))
-
-
-# ---------------------------------------------------------------------------
-# API
-
+    ui.label('Descargas').classes('text-lg')
+    for f in files:
+        with ui.row():
+            ui.button(f.name, on_click=lambda f=f: ui.open(f'/static/downloads/{f.name}'))
+            ui.label(datetime.fromtimestamp(f.stat().st_mtime).isoformat())
+            ui.label(f'{f.stat().st_size} bytes')
+            ui.button('Borrar', on_click=lambda f=f: (f.unlink(), ui.open('/descargas')))
 
 @app.get('/api/orders')
 def api_orders(request: Request, status: str | None = None, q: str | None = None):
@@ -551,11 +551,30 @@ def api_export_csv():
 # ---------------------------------------------------------------------------
 # Run
 
-def home():
-    page_list_orders()
-    page_downloads()
+@app.post('/api/generate')
+async def api_generate(data: dict):
+    ids = data.get('ids', [])
+    path = generate_many(ids)
+    return {'zip_path': f'/static/downloads/{path.name}'}
 
-if __name__ == '__main__':
+
+@app.get('/api/export.csv')
+def api_export_csv():
+    rows = db_list_orders()
+    def gen():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['order_number','client','email','cover','size','pages','language','tags','notes','status'])
+        for r in rows:
+            writer.writerow([r['order_number'], r['client'], r['email'], r['cover'], r['size'],
+                             r['pages'], r['language'], r['tags'], r['notes'], r['status']])
+        yield output.getvalue()
+    return StreamingResponse(gen(), media_type='text/csv', headers={'Content-Disposition':'attachment; filename="orders.csv"'})
+
+
+# ---------------------------------------------------------------------------
+# Run
+
+if __name__ in {'__main__', '__mp_main__'}:
     db_init()
-    home()
-    ui.run()
+    ui.run(host=os.getenv('ECS_HOST', '0.0.0.0'), port=int(os.getenv('ECS_PORT', 8080)))
