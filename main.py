@@ -290,7 +290,7 @@ async def handle_upload(e: UploadEventArguments) -> None:
 def import_block() -> None:
     with ui.card().classes('p-4'):
         ui.label('Importar pedidos (CSV/Excel)')
-        ui.upload(on_upload=handle_upload, auto_upload=True, accept='.csv,.xlsx,.xls')
+        ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
 
 
 def load_sample_orders() -> None:
@@ -365,7 +365,7 @@ def render_downloads() -> None:
             path = Path(d['zip']).name
             with ui.row():
                 ui.label(f"Pedido {d['order']}")
-                ui.button('Descargar ZIP', on_click=lambda p=path: ui.open(f'/downloads/{p}'))
+                ui.button('Descargar ZIP', on_click=lambda p=path: ui.download(f'/downloads/{p}'))
 @ui.page('/')
 def main_page() -> None:
     global table, download_container
@@ -385,7 +385,7 @@ def main_page() -> None:
     with ui.header().classes('items-center justify-between'):
         with ui.row():
             ui.button('GENERAR SELECCIONADOS', on_click=generate_selected)
-            ui.button('EXPORTAR CSV', on_click=lambda: ui.open('/api/export.csv'))
+            ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
             ui.button('Cargar pedidos de prueba', on_click=load_sample_orders)
 
@@ -399,5 +399,5 @@ def main_page() -> None:
 # Run app
 
 if __name__ in {'__main__', '__mp_main__'}:
-    ui.run(host='0.0.0.0', port=8080)
+    ui.run(host='0.0.0.0', port=8080, reload=False)
 
