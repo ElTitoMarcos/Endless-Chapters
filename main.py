@@ -154,7 +154,6 @@ def db_upsert_order(order: Order, items: list[Item]) -> str:
     conn.close()
     return order.id
 
-
 def db_list_orders() -> list[sqlite3.Row]:
     conn = db_connect()
     rows = conn.execute('SELECT * FROM orders ORDER BY datetime(created) DESC').fetchall()
@@ -462,8 +461,6 @@ def generate_one(order_id: str, dialog: ui.dialog) -> None:
         db_update_status(order_id, 'error', error_message=str(e))
         ui.notify('Error al generar', type='negative')
     dialog.close()
-
-
 @ui.page('/')
 def page_list_orders() -> None:
     global selected_orders
@@ -500,7 +497,6 @@ def page_list_orders() -> None:
         table.update()
 
     import_block(refresh_table)
-
 
 def generate_selected() -> None:
     if not selected_orders:
@@ -539,8 +535,6 @@ def api_orders(request: Request, status: str | None = None, q: str | None = None
     if q:
         rows = [r for r in rows if q.lower() in r['order_number'].lower()]
     return JSONResponse(rows)
-
-
 @app.post('/api/generate')
 async def api_generate(data: dict):
     ids = data.get('ids', [])
