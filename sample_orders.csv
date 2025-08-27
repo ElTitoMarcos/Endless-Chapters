@@ -1,3 +1,7 @@
-order_id,title,email,tags,notes,cover,size,wants_narr,pages
-1001,El viaje de Luna,luna@example.com,hardcover;6x9;foto,Niña y su gato exploran un bosque mágico,hardcover,6x9,true,24
-1002,El faro de Mateo,mateo@example.com,paperback;5x8,Niño ayuda a encender el faro antes de la tormenta,paperback,5x8,false,20
+order_id,title,email,tags,notes,cover,size,wants_voice,pages
+1001,El viaje de Luna,luna@example.com,voz,Niña y su gato exploran un bosque mágico,hardcover,6x9,true,24
+1002,El faro de Mateo,mateo@example.com,qr,Niño ayuda a encender el faro antes de la tormenta,paperback,5x8,false,20
+1003,La magia de Sofía,sofia@example.com,"voz,qr",Niña encuentra un libro encantado que cobra vida,hardcover,8x8,true,32
+1004,Aventura de Diego,diego@example.com,,Niño construye una nave espacial de cartón,spiral,7x10,false,28
+1005,Misterio de Valentina,valentina@example.com,qr,Valentina resuelve enigmas en un museo,paperback,5x5,false,30
+1006,Viaje de Carla,carla@example.com,voz,Carla viaja al fondo del mar con un delfín,hardcover,6x6,true,40
