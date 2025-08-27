@@ -323,48 +323,11 @@ def page_list_orders():
     ui.label('Pedidos').classes('text-xl font-bold mb-2')
 
     friendly_rows = [to_row(r) for r in rows]
-    cols = [{'name': k, 'label': k.replace('_',' ').title(), 'field': k, 'sortable': True} for k in friendly_rows[0].keys()]
-    t = ui.table(columns=cols, rows=friendly_rows, row_key='id').classes('w-full')
-
-
-
-    def parse_orders(temp_path: Path):
-        ext = temp_path.suffix.lower()
-        try:
-            if ext == '.csv':
-                try:
-                    df = pd.read_csv(temp_path, encoding='utf-8-sig')
-                except Exception:
-                    df = pd.read_csv(temp_path, encoding='latin1')
-            else:
-                df = pd.read_excel(temp_path)
-        except Exception as e:
-            ui.notify(f'Error leyendo archivo: {e}', color='negative')
-            return 0
-        n = 0
-        for row in df.fillna('').to_dict('records'):
-            try:
-                upsert_order(row)
-                n += 1
-            except Exception as e:
-                ui.notify(f'Fila con error: {e}', color='warning', timeout=6000)
-        return n
-
-    async def on_upload(e):
-        # e no tipado (evita choque de versiones)
-        up = e  # NiceGUI entrega .name, .content
-        suffix = Path(up.name).suffix.lower()
-        if suffix not in ('.csv', '.xlsx', '.xls'):
-            ui.notify('Solo se aceptan .csv, .xlsx, .xls', color='warning')
-            return
-        tmp = DATA_DIR / f"upload-{uuid.uuid4()}{suffix}"
-        with open(tmp, 'wb') as f:
-            f.write(up.content.read())
-        added = parse_orders(tmp)
-        ui.notify(f'Importados: {added}', color='positive')
-        ui.run_javascript('window.location.hash = "#pedidos"; window.location.reload()')
-
-    ui.upload(label='Selecciona CSV/Excel', on_upload=on_upload).props('accept=.csv,.xlsx,.xls').classes('w-full')
+    cols = [
+        {'name': k, 'label': k.replace('_', ' ').title(), 'field': k, 'sortable': True}
+        for k in friendly_rows[0].keys()
+    ]
+    ui.table(columns=cols, rows=friendly_rows, row_key='id').classes('w-full')
 
 def order_page(oid: str):
     r = get_order(oid)
@@ -526,7 +489,6 @@ def order_page(oid: str):
             ui.link(f['filename'], serve_path(Path(f['path']), f['filename']), new_tab=True)
 
 # ------------------ Rutas ------------------
-@ui.page('/')
 
 def parse_orders(temp_path: Path):
     ext = temp_path.suffix.lower()
@@ -549,24 +511,6 @@ def parse_orders(temp_path: Path):
         except Exception as e:
             ui.notify(f"Fila con error: {e}", color="warning", timeout=6000)
     return n
-
-    async def on_upload(e):
-        # NiceGUI da .name y .content (file-like)
-        up = e
-        suffix = Path(up.name).suffix.lower()
-        if suffix not in (".csv", ".xlsx", ".xls"):
-            ui.notify("Solo se aceptan .csv, .xlsx, .xls", color="warning")
-            return
-        tmp = DATA_DIR / f"upload-{uuid.uuid4()}{suffix}"
-        with open(tmp, "wb") as f:
-            f.write(up.content.read())
-        added = parse_orders(tmp)
-        ui.notify(f"Importados: {added}", color="positive")
-        ui.run_javascript('window.location.hash = "#pedidos"; window.location.reload()')
-
-    ui.upload(label="Selecciona CSV/Excel", on_upload=on_upload) \
-      .props("accept=.csv,.xlsx,.xls") \
-      .classes("w-full")
 def import_block():
     """Bloque UI para importar pedidos desde CSV/Excel sin endpoints FastAPI."""
     import tempfile
@@ -602,7 +546,11 @@ def import_block():
         label="Sube CSV o Excel",
         auto_upload=True,
         on_upload=on_upload
-    ).props('accept=".csv,.xlsx,.xls"').classes("w-full")`r`n`r`n\ndef home():
+    ).props('accept=.csv,.xlsx,.xls').classes('w-full')
+
+
+@ui.page('/')
+def home():
     header()
     with ui.column().classes('max-w-5xl mx-auto'):
         import_block()
@@ -624,227 +572,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-def fetch_orders():
-    import sqlite3
-    con = sqlite3.connect(DB_PATH)
-    con.row_factory = sqlite3.Row
-    rows = [dict(r) for r in con.execute(
-        'SELECT id, created_at, order_code, customer, email, cover, size, pages, wants_qr, wants_voice, tags FROM orders ORDER BY created_at DESC'
-    )]
-    con.close()
-    return rows
-
-
-
-def classes(s: str):
-    el = ui.get_last_element()
-    el.classes(s)
-    return el
-
-# === PATCHED order table ===
-def to_row(r):
-    return {
-        'id': r.get('id'),
-        'created': str(r.get('created_at','')).split('T')[0] if r.get('created_at') else '',
-        'order': r.get('order_code', ''),
-        'cliente': r.get('customer_name', ''),
-        'email': r.get('email', ''),
-        'cover': r.get('cover_type', ''),
-        'size': r.get('size', ''),
-        'pages': r.get('pages', ''),
-        'qr': 'Sí' if r.get('wants_qr') else 'No',
-        'voz': 'Sí' if r.get('wants_voice') else 'No',
-        'estado': r.get('status', ''),
-    }
-def page_list_orders():
-    import sqlite3
-    from pathlib import Path
-
-    def _db_path():
-        try:
-            return str(DB_PATH)
-        except NameError:
-            try:
-                base = DATA_DIR
-            except NameError:
-                base = Path(__file__).parent / 'data'
-                base.mkdir(parents=True, exist_ok=True)
-            return str(base / 'app.db')
-
-    def _fetch_orders(limit: int = 1000):
-        conn = sqlite3.connect(_db_path())
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        base_cols = "id, created_at, order_code, customer_name, email, cover_type, size, pages, wants_qr, wants_voice"
-        try:
-            q = f"SELECT {base_cols}, COALESCE(status,'') AS status FROM orders ORDER BY created_at DESC LIMIT ?"
-            rows = cur.execute(q, (limit,)).fetchall()
-        except sqlite3.OperationalError:
-            q = f"SELECT {base_cols} FROM orders ORDER BY created_at DESC LIMIT ?"
-            rows = cur.execute(q, (limit,)).fetchall()
-        out = [dict(r) for r in rows]
-        conn.close()
-        return out
-
-    rows = _fetch_orders()
-    if not rows:
-        ui.label('Sin pedidos aún')
-        return
-
-    def to_row(r):
-        return {
-            'id': r.get('id'),
-            'created': str(r.get('created_at','')).split('T')[0],
-            'order': r.get('order_code',''),
-            'cliente': r.get('customer_name',''),
-            'email': r.get('email',''),
-            'cover': r.get('cover_type',''),
-            'size': r.get('size',''),
-            'pages': r.get('pages',''),
-            'qr': 'Sí' if r.get('wants_qr') else 'No',
-            'voz': 'Sí' if r.get('wants_voice') else 'No',
-            'estado': r.get('status',''),
-        }
-
-    ui.label('Pedidos').classes('text-xl font-bold mb-2')
-
-    friendly_rows = [to_row(r) for r in rows]
-    cols = [{'name': k, 'label': k.replace('_',' ').title(), 'field': k, 'sortable': True} for k in friendly_rows[0].keys()]
-    t = ui.table(columns=cols, rows=friendly_rows, row_key='id').classes('w-full')
-
-def on_row_click(e):
-    # e.args puede venir como dict, lista, tupla o incluso None
-    rid = None
-    row = None
-    a = getattr(e, 'args', None)
-
-    if isinstance(a, dict):
-        row = a.get('row') or a.get('rows') or a
-    elif isinstance(a, (list, tuple)):
-        for item in a:
-            if isinstance(item, dict):
-                cand = item.get('row', item)
-                if isinstance(cand, dict):
-                    row = cand
-                    if any(k in row for k in ('id', 'key', 'pk')):
-                        break
-
-    if isinstance(row, dict):
-        rid = row.get('id') or row.get('key') or row.get('pk')
-
-    if rid:
-        ui.open(f"/order/{rid}")
-    else:
-        ui.notify('No pude leer el id de la fila', color='warning')
-
-    def parse_orders(temp_path: Path):
-        ext = temp_path.suffix.lower()
-        try:
-            if ext == '.csv':
-                try:
-                    df = pd.read_csv(temp_path, encoding='utf-8-sig')
-                except Exception:
-                    df = pd.read_csv(temp_path, encoding='latin1')
-            else:
-                df = pd.read_excel(temp_path)
-        except Exception as e:
-            ui.notify(f'Error leyendo archivo: {e}', color='negative')
-            return 0
-        n = 0
-        for row in df.fillna('').to_dict('records'):
-            try:
-                upsert_order(row)
-                n += 1
-            except Exception as e:
-                ui.notify(f'Fila con error: {e}', color='warning', timeout=6000)
-        return n
-
-    async def on_upload(e):
-        up = e  # NiceGUI entrega .name y .content
-        suffix = Path(up.name).suffix.lower()
-        if suffix not in ('.csv', '.xlsx', '.xls'):
-            ui.notify('Solo se aceptan .csv, .xlsx, .xls', color='warning')
-            return
-        tmp = DATA_DIR / f"upload-{uuid.uuid4()}{suffix}"
-        with open(tmp, 'wb') as f:
-            f.write(up.content.read())
-        added = parse_orders(tmp)
-        ui.notify(f'Importados: {added}', color='positive')
-        ui.run_javascript('window.location.hash = "#pedidos"; window.location.reload()')
-
-    ui.upload(label='Selecciona CSV/Excel', on_upload=on_upload) \
-      .props('accept=.csv,.xlsx,.xls') \
-      .classes('w-full')
-    def parse_orders(temp_path: Path) -> int:
-        ext = temp_path.suffix.lower()
-        try:
-            if ext == '.csv':
-                try:
-                    df = pd.read_csv(temp_path, encoding='utf-8-sig')
-                except Exception:
-                    df = pd.read_csv(temp_path, encoding='latin1')
-            else:
-                df = pd.read_excel(temp_path)
-        except Exception as e:
-            ui.notify(f'Error leyendo archivo: {e}', color='negative')
-            return 0
-
-        upsert = globals().get('upsert_order')
-        if upsert is None:
-            ui.notify('No encuentro la función upsert_order()', color='negative')
-            return 0
-
-        n = 0
-        for row in df.fillna('').to_dict('records'):
-            try:
-                upsert(row)
-                n += 1
-            except Exception as e:
-                ui.notify(f'Fila con error: {e}', color='warning', timeout=6000)
-        return n
-
-    async def on_upload(e):
-        up = e  # NiceGUI entrega .name y .content
-        name = getattr(up, 'name', None)
-        content = getattr(up, 'content', None)
-        if not name or content is None:
-            ui.notify('Evento de subida inválido', color='negative')
-            return
-
-        suffix = Path(name).suffix.lower()
-        if suffix not in ('.csv', '.xlsx', '.xls'):
-            ui.notify('Solo se aceptan .csv, .xlsx, .xls', color='warning')
-            return
-
-        tmp = base_dir / f"upload-{uuid.uuid4()}{suffix}"
-        try:
-            with open(tmp, 'wb') as f:
-                f.write(content.read())
-        except Exception as e:
-            ui.notify(f'No pude guardar el archivo: {e}', color='negative')
-            return
-
-        added = parse_orders(tmp)
-        ui.notify(f'Importados: {added}', color='positive')
-        try:
-            ui.run_javascript('window.location.hash = "#pedidos"; window.location.reload()')
-        except Exception:
-            pass
-
-    ui.upload(label='Selecciona CSV/Excel', on_upload=on_upload).props('accept=.csv,.xlsx,.xls').classes('w-full')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
