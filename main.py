@@ -1,574 +1,564 @@
-﻿from __future__ import annotations
-from typing import Optional
-import tempfile
-import uuid
-# -*- coding: utf-8 -*-
-import os, io, json, uuid, sqlite3, shutil, subprocess, sys
+from __future__ import annotations
+
+import os
+import csv
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, date
 from pathlib import Path
-from datetime import datetime, timezone
+from typing import Optional, Any
+import uuid
+import sqlite3
+import zipfile
+import tempfile
+import io
 
 import pandas as pd
-from nicegui import ui, app, events
-from starlette.routing import Mount
+from nicegui import ui, app
+from fastapi import Request
+from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.staticfiles import StaticFiles
 import qrcode
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
-import pikepdf
+from reportlab.lib.units import inch
 
+# ---------------------------------------------------------------------------
+# Paths and logging
 BASE_DIR = Path(__file__).parent.resolve()
-DATA_DIR = BASE_DIR / "data"
-DOWNLOAD_DIR = BASE_DIR / "downloads"
-DB_PATH = DATA_DIR / "app.db"
+DATA_DIR = BASE_DIR / 'data'
+DOWNLOAD_DIR = BASE_DIR / 'downloads'
+DB_PATH = DATA_DIR / 'orders.db'
+DATA_DIR.mkdir(exist_ok=True)
+DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-# -- montar descargas
-try:
-    already = any(isinstance(r, Mount) and getattr(r, 'path', None) == '/download' for r in app.routes)
-except Exception:
-    already = False
-if not already:
-    app.mount('/download', StaticFiles(directory=str(DOWNLOAD_DIR)), name='download')
+logging.basicConfig(
+    filename=DATA_DIR / 'app.log',
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-def serve_path(path: Path, name: str) -> str:
-    return f"/download/{name}"
+# serve downloads
+if not any(r.path == '/static/downloads' for r in app.routes if hasattr(r, 'path')):
+    app.mount('/static/downloads', StaticFiles(directory=str(DOWNLOAD_DIR)), name='static-downloads')
 
-# ------------------ SQLite helpers ------------------
-def db():
+# ---------------------------------------------------------------------------
+# Models
+@dataclass
+class Item:
+    sku: str
+    qty: int
+    language: Optional[str] = None
+    title: Optional[str] = None
+    personalization: Optional[str] = None
+    pages: Optional[int] = None
+
+
+@dataclass
+class Order:
+    id: str
+    order_number: str
+    created: date
+    client: str
+    email: str
+    cover: str
+    size: str
+    pages: int
+    language: Optional[str] = None
+    tags: set[str] = field(default_factory=set)
+    notes: Optional[str] = None
+    status: str = 'pending'
+    error_message: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    output_dir: Optional[str] = None
+    output_zip: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Database helpers
+
+def db_connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db():
-    conn = db()
+
+def db_init() -> None:
+    conn = db_connect()
     cur = conn.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS orders (
-      id TEXT PRIMARY KEY,
-      created_at TEXT,
-      order_code TEXT,         -- id externo (del CSV/Excel)
-      customer_name TEXT,
-      email TEXT,
-      cover_type TEXT,
-      size TEXT,
-      pages INTEGER,
-      wants_qr INTEGER,
-      wants_voice INTEGER,
-      tags TEXT,               -- coma separada
-      meta_json TEXT,          -- JSON completo de la fila
-      status TEXT DEFAULT 'imported'
-    );
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS files (
-      id TEXT PRIMARY KEY,
-      order_id TEXT,
-      kind TEXT,               -- 'voice' | 'pdf_a' | 'pdf_b' | 'processed_pdf' | 'prompt_txt'
-      filename TEXT,
-      path TEXT,
-      created_at TEXT
-    );
-    """)
-    conn.commit()
-    conn.close()
-
-def upsert_order(row: dict) -> str:
-    """Inserta pedido si no existe (por order_code+email) y devuelve id interno."""
-    conn = db()
-    cur = conn.cursor()
-    order_code = str(row.get('order_id') or row.get('order') or row.get('id') or row.get('Order') or row.get('ORDER') or '')
-    email = str(row.get('email') or row.get('Email') or '')
-    customer = str(row.get('customer') or row.get('Customer') or row.get('name') or row.get('Name') or '')
-    cover = (row.get('cover_type') or row.get('cover') or row.get('Cover') or '').strip().lower()
-    size = (row.get('size') or row.get('Size') or '').strip()
-    try:
-        pages = int(row.get('pages') or row.get('Pages') or 0)
-    except Exception:
-        pages = 0
-    # detectar QR / voz por columnas o por tags
-    tags_raw = row.get('tags') or row.get('Tags') or ''
-    tags = str(tags_raw)
-    tags_l = [t.strip().lower() for t in str(tags).split(',') if t.strip()]
-    wants_qr = any(t in ('qr','qrcode','codigo qr','cï¿½digo qr') for t in tags_l) or bool(str(row.get('wants_qr') or row.get('qr') or 'false').strip().lower() in ('1','true','si','si','yes'))
-    wants_voice = any(t in ('voz','narration','voice','voice_clone','clonar voz','narraciï¿½n') for t in tags_l) or bool(str(row.get('wants_voice') or row.get('voice') or 'false').strip().lower() in ('1','true','sï¿½','si','yes'))
-
-    meta_json = json.dumps(row, ensure_ascii=False)
-    oid = str(uuid.uuid4())
-
-    # ï¿½duplicado por order_code+email?
-    cur.execute("SELECT id FROM orders WHERE order_code=? AND COALESCE(email,'')=COALESCE(?, '')", (order_code, email))
-    existing = cur.fetchone()
-    if existing:
-        oid = existing['id']
-        cur.execute("""UPDATE orders SET customer_name=?, cover_type=?, size=?, pages=?, 
-                       wants_qr=?, wants_voice=?, tags=?, meta_json=?, status=COALESCE(status,'imported')
-                       WHERE id=?""",
-                    (customer, cover, size, pages, int(wants_qr), int(wants_voice), tags, meta_json, oid))
-    else:
-        cur.execute("""INSERT INTO orders (id, created_at, order_code, customer_name, email, cover_type, size, pages, wants_qr, wants_voice, tags, meta_json, status)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'imported')""",
-                    (oid, datetime.now(timezone.utc).isoformat(), order_code, customer, email, cover, size, pages, int(wants_qr), int(wants_voice), tags, meta_json))
-    conn.commit()
-    conn.close()
-    return oid
-
-def list_orders():
-    conn = db()
-    rows = conn.execute("SELECT * FROM orders ORDER BY datetime(created_at) DESC").fetchall()
-    conn.close()
-    return rows
-
-def get_order(oid: str):
-    conn = db()
-    row = conn.execute("SELECT * FROM orders WHERE id=?", (oid,)).fetchone()
-    conn.close()
-    return row
-
-def has_voice(oid: str) -> bool:
-    conn = db()
-    r = conn.execute("SELECT 1 FROM files WHERE order_id=? AND kind='voice'", (oid,)).fetchone()
-    conn.close()
-    return bool(r)
-
-def add_file(oid: str, kind: str, src_tmp: Path, final_name: str | None = None) -> Path:
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    ext = ''.join(Path(src_tmp.name).suffixes) or ''
-    name = final_name or f"{oid}-{kind}{ext}"
-    dest = DOWNLOAD_DIR / name
-    shutil.move(str(src_tmp), str(dest))
-    conn = db()
-    conn.execute("INSERT INTO files (id, order_id, kind, filename, path, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                 (str(uuid.uuid4()), oid, kind, name, str(dest), datetime.now(timezone.utc).isoformat()))
-    conn.commit()
-    conn.close()
-    return dest
-
-def files_for_order(oid: str, kind: str | None = None):
-    conn = db()
-    if kind:
-        rows = conn.execute("SELECT * FROM files WHERE order_id=? AND kind=? ORDER BY datetime(created_at) DESC", (oid, kind)).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM files WHERE order_id=? ORDER BY datetime(created_at) DESC", (oid,)).fetchall()
-    conn.close()
-    return rows
-
-# ------------------ PDF helpers ------------------
-def ghostscript_path() -> str | None:
-    # intenta encontrar Ghostscript (para B/N)
-    candidates = [
-        r"C:\Program Files\gs\gs10.03.1\bin\gswin64c.exe",
-        r"C:\Program Files\gs\gs10.02.1\bin\gswin64c.exe",
-        r"C:\Program Files\gs\gs10.01.2\bin\gswin64c.exe",
-        r"C:\Program Files\gs\gs9.55.0\bin\gswin64c.exe",
-    ]
-    for c in candidates:
-        if Path(c).exists():
-            return c
-    # si estï¿½ en PATH
-    return "gswin64c" if shutil.which("gswin64c") else None
-
-def grayscale_except_cover(src: Path, pages_cover: int, dst: Path) -> bool:
-    """Devuelve True si se pudo B/N, False si se deja en color (por falta de GS)."""
-    gs = ghostscript_path()
-    if not gs:
-        shutil.copyfile(src, dst)
-        return False
-    tmp_gray = src.with_suffix(".all_gray.pdf")
-    # B/N completo con GS
-    args = [
-        gs, "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.5",
-        "-dProcessColorModel=/DeviceGray", "-dColorConversionStrategy=/Gray",
-        "-dAutoRotatePages=/None", "-dNOPAUSE", "-dBATCH",
-        f"-sOutputFile={tmp_gray}", str(src)
-    ]
-    try:
-        subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        shutil.copyfile(src, dst)
-        return False
-    # recombinar: primeras N pï¿½ginas en color del original + resto en gris
-    with pikepdf.open(str(src)) as cpdf, pikepdf.open(str(tmp_gray)) as gpdf, pikepdf.new() as out:
-        total = len(cpdf.pages)
-        cov = min(pages_cover, total)
-        for i in range(cov):
-            out.pages.append(cpdf.pages[i])
-        for i in range(cov, total):
-            out.pages.append(gpdf.pages[i])
-        out.save(str(dst))
-    tmp_gray.unlink(missing_ok=True)
-    return True
-
-def add_qr_page(pdf_in: Path, qr_value: str, pdf_out: Path):
-    # genera una ï¿½ltima pï¿½gina con un QR grande y texto
-    qr_img = qrcode.make(qr_value)
-    qr_buf = io.BytesIO()
-    qr_img.save(qr_buf, format="PNG")
-    qr_buf.seek(0)
-
-    tmp_qr = pdf_in.with_suffix(".qrpage.pdf")
-    c = canvas.Canvas(str(tmp_qr), pagesize=A4)
-    iw, ih = ImageReader(qr_buf).getSize()
-    # escalar para que quepa agradablemente (~70% del ancho)
-    page_w, page_h = A4
-    target_w = page_w * 0.7
-    scale = target_w / iw
-    tw, th = iw * scale, ih * scale
-    x = (page_w - tw) / 2
-    y = (page_h - th) / 2 + 40
-    c.drawImage(ImageReader(qr_buf), x, y, width=tw, height=th, mask='auto')
-    c.setFont("Helvetica", 14)
-    c.drawCentredString(page_w/2, y - 24, "Escanea este cï¿½digo para acceder al contenido de audio")
-    c.save()
-
-    with pikepdf.open(str(pdf_in)) as inp, pikepdf.open(str(tmp_qr)) as tail, pikepdf.new() as out:
-        for p in inp.pages:
-            out.pages.append(p)
-        for p in tail.pages:
-            out.pages.append(p)
-        out.save(str(pdf_out))
-    tmp_qr.unlink(missing_ok=True)
-
-# ------------------ Prompts ------------------
-PROMPT_BASE = """Quiero un cuento infantil personalizado.
-Datos:
-- Cliente: {customer}
-- Tamaï¿½o: {size}
-- Tipo de tapa: {cover}
-- Pï¿½ginas: {pages}
-- Tono: cï¿½lido, educativo y divertido.
-Instrucciones:
-- Escribe en escenas de 1 pï¿½gina cada una.
-- Espaï¿½ol neutro, frases cortas, apto 4-7 aï¿½os.
-- Evita violencia o miedo.
-"""
-
-PROMPT_VARIATIONS = [
-    "Tema central: amistad y trabajo en equipo. Aï¿½ade un giro sorpresa al final.",
-    "Tema central: aventura y descubrimiento. Incluye un acertijo sencillo a mitad del libro.",
-    "Tema central: superaciï¿½n personal. Introduce un personaje ayudante con frase recurrente."
-]
-
-def make_prompts(order: sqlite3.Row) -> list[tuple[str, str]]:
-    """Devuelve lista [(nombre, contenido_txt), ...]. Si 24p tapa dura -> doble prompt (A/B)."""
-    prompts = []
-    for i, v in enumerate(PROMPT_VARIATIONS, start=1):
-        base = PROMPT_BASE + "\n" + v + "\n"
-        if (order['cover_type'] or '').lower() == 'hardcover' and int(order['pages'] or 0) == 24:
-            # dos mitades
-            pa = base + "\nGenera la PARTE A (pï¿½ginas 1-12). Cierra en mini-cliffhanger amable."
-            pb = base + "\nGenera la PARTE B (pï¿½ginas 13-24). Retoma y cierra la historia con moraleja."
-            prompts.append((f"prompt_var{i}_parte_A.txt", pa))
-            prompts.append((f"prompt_var{i}_parte_B.txt", pb))
-        else:
-            prompts.append((f"prompt_var{i}.txt", base))
-    return prompts
-
-# ------------------ UI ------------------
-def header():
-    with ui.header().classes('items-center justify-between'):
-        ui.label('Endless Chapters Studio').classes('text-lg font-bold')
-        with ui.row().classes('items-center gap-3'):
-            ui.link('Descargas', '/download/', new_tab=True)
-            ui.link('Repositorio de pedidos', '#pedidos')
-def page_list_orders():
-    import sqlite3
-    from pathlib import Path
-
-    def _db_path():
-        try:
-            return str(DB_PATH)
-        except NameError:
-            try:
-                base = DATA_DIR
-            except NameError:
-                base = Path(__file__).parent / 'data'
-                base.mkdir(parents=True, exist_ok=True)
-            return str(base / 'app.db')
-
-    def _fetch_orders(limit: int = 1000):
-        conn = sqlite3.connect(_db_path())
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        base_cols = "id, created_at, order_code, customer_name, email, cover_type, size, pages, wants_qr, wants_voice"
-        try:
-            q = f"SELECT {base_cols}, COALESCE(status,'') AS status FROM orders ORDER BY created_at DESC LIMIT ?"
-            rows = cur.execute(q, (limit,)).fetchall()
-        except sqlite3.OperationalError:
-            q = f"SELECT {base_cols} FROM orders ORDER BY created_at DESC LIMIT ?"
-            rows = cur.execute(q, (limit,)).fetchall()
-        out = [dict(r) for r in rows]
-        conn.close()
-        return out
-
-    rows = _fetch_orders()
-    if not rows:
-        ui.label('Sin pedidos aún')
-        return
-
-    def to_row(r):
-        return {
-            'id': r.get('id'),
-            'created': str(r.get('created_at','')).split('T')[0],
-            'order': r.get('order_code',''),
-            'cliente': r.get('customer_name',''),
-            'email': r.get('email',''),
-            'cover': r.get('cover_type',''),
-            'size': r.get('size',''),
-            'pages': r.get('pages',''),
-            'qr': 'Sí' if r.get('wants_qr') else 'No',
-            'voz': 'Sí' if r.get('wants_voice') else 'No',
-            'estado': r.get('status',''),
-        }
-
-    ui.label('Pedidos').classes('text-xl font-bold mb-2')
-
-    friendly_rows = [to_row(r) for r in rows]
-    cols = [
-        {'name': k, 'label': k.replace('_', ' ').title(), 'field': k, 'sortable': True}
-        for k in friendly_rows[0].keys()
-    ]
-    ui.table(columns=cols, rows=friendly_rows, row_key='id').classes('w-full')
-
-def order_page(oid: str):
-    r = get_order(oid)
-    if not r:
-        ui.label('Pedido no encontrado').classes('text-red-600')
-        return
-    wants_qr = bool(r['wants_qr'])
-    wants_voice = bool(r['wants_voice'])
-    pages = int(r['pages'] or 0)
-    is_hd_24 = (r['cover_type'] or '').lower() == 'hardcover' and pages == 24
-
-    ui.label(f"Pedido {r['order_code']}").classes('text-xl font-bold')
-    ui.markdown(
-        f"- Cliente: **{r['customer_name']}**  \n"
-        f"- Email: **{r['email']}**  \n"
-        f"- Tapa: **{r['cover_type']}** | Tamaï¿½o: **{r['size']}** | Pï¿½ginas: **{pages}**  \n"
-        f"- Requiere QR: **{'Sï¿½' if wants_qr else 'No'}** | Requiere voz: **{'Sï¿½' if wants_voice else 'No'}**"
+    cur.execute(
+        '''CREATE TABLE IF NOT EXISTS orders(
+               id TEXT PRIMARY KEY,
+               order_number TEXT UNIQUE,
+               created TEXT,
+               client TEXT,
+               email TEXT,
+               cover TEXT,
+               size TEXT,
+               pages INTEGER,
+               language TEXT,
+               tags TEXT,
+               notes TEXT,
+               status TEXT,
+               error_message TEXT,
+               generated_at TEXT,
+               output_dir TEXT,
+               output_zip TEXT
+           );'''
     )
+    cur.execute(
+        '''CREATE TABLE IF NOT EXISTS order_items(
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               order_id TEXT,
+               sku TEXT,
+               qty INTEGER,
+               language TEXT,
+               title TEXT,
+               personalization TEXT,
+               pages INTEGER
+           );'''
+    )
+    conn.commit()
+    conn.close()
 
-    # ---- Voice (obligatoria si se requiere) ----
-    if wants_voice and not has_voice(oid):
-        ui.separator()
-        ui.label('Este pedido requiere archivo de voz para clonaciï¿½n').classes('text-md text-amber-700')
-        async def on_voice(e):
-            up = e
-            ext = Path(up.name).suffix.lower()
-            if ext not in ('.wav', '.mp3', '.m4a', '.flac'):
-                ui.notify('Sube .wav/.mp3/.m4a/.flac', color='warning'); return
-            tmp = DATA_DIR / f"voice-{uuid.uuid4()}{ext}"
-            with open(tmp, 'wb') as f: f.write(up.content.read())
-            add_file(oid, 'voice', tmp, final_name=f"{oid}-voice{ext}")
-            ui.notify('Voz cargada ?'); ui.run_javascript('window.location.reload()')
-        ui.upload('Subir voz (obligatorio)', on_upload=on_voice).props('accept=.wav,.mp3,.m4a,.flac')
 
-    # ---- Prompts (3 variaciones). Si 24p HD => doble prompt A/B ----
-    ui.separator()
-    ui.label('Prompts sugeridos').classes('text-md font-medium')
-    def gen_and_save_prompts():
-        for name, txt in make_prompts(r):
-            p = DOWNLOAD_DIR / f"{oid}-{name}"
-            with open(p, 'w', encoding='utf-8') as f: f.write(txt)
-            conn = db(); conn.execute(
-                "INSERT INTO files (id, order_id, kind, filename, path, created_at) VALUES (?, ?, 'prompt_txt', ?, ?, ?)",
-                (str(uuid.uuid4()), oid, p.name, str(p), datetime.now(timezone.utc).isoformat())
-            ); conn.commit(); conn.close()
-        ui.notify('Prompts generados en Descargas', color='positive'); ui.run_javascript('window.location.reload()')
-
-    ui.button('Generar 3 prompts', on_click=gen_and_save_prompts, color='primary')
-
-    # Mostrar prompts (si existen)
-    prompts = files_for_order(oid, 'prompt_txt')
-    if prompts:
-        with ui.column().classes('mt-2'):
-            for f in prompts:
-                ui.link(f['filename'], serve_path(Path(f['path']), f['filename']), new_tab=True)
-
-    # ---- PDF(s) finales para procesar ----
-    ui.separator()
-    if is_hd_24:
-        ui.label('Sube los 2 PDFs finales (Parte A y Parte B)').classes('text-md')
+def db_upsert_order(order: Order, items: list[Item]) -> str:
+    conn = db_connect()
+    cur = conn.cursor()
+    cur.execute('SELECT id, status FROM orders WHERE order_number=?', (order.order_number,))
+    row = cur.fetchone()
+    if row:
+        order.id = row['id']
+        prev_status = row['status']
+        status = 'done' if prev_status == 'done' else 'pending'
+        cur.execute('''UPDATE orders SET created=?, client=?, email=?, cover=?, size=?,
+                       pages=?, language=?, tags=?, notes=?, status=? WHERE id=?''',
+                    (order.created.isoformat(), order.client, order.email, order.cover,
+                     order.size, order.pages, order.language,
+                     ','.join(sorted(order.tags)), order.notes, status, order.id))
+        cur.execute('DELETE FROM order_items WHERE order_id=?', (order.id,))
     else:
-        ui.label('Sube el PDF final del libro').classes('text-md')
+        order.id = str(uuid.uuid4())
+        cur.execute('''INSERT INTO orders(id, order_number, created, client, email, cover, size, pages,
+                       language, tags, notes, status)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    (order.id, order.order_number, order.created.isoformat(), order.client,
+                     order.email, order.cover, order.size, order.pages, order.language,
+                     ','.join(sorted(order.tags)), order.notes, order.status))
+    for it in items:
+        cur.execute('''INSERT INTO order_items(order_id, sku, qty, language, title, personalization, pages)
+                       VALUES(?,?,?,?,?,?,?)''',
+                    (order.id, it.sku, it.qty, it.language, it.title, it.personalization, it.pages))
+    conn.commit()
+    conn.close()
+    return order.id
 
-    needed_voices_ok = (not wants_voice) or has_voice(oid)
 
-    async def on_pdf_a(e):
-        up = e
-        if Path(up.name).suffix.lower() != '.pdf':
-            ui.notify('Solo PDF', color='warning'); return
-        tmp = DATA_DIR / f"pdfA-{uuid.uuid4()}.pdf"
-        with open(tmp, 'wb') as f: f.write(up.content.read())
-        add_file(oid, 'pdf_a', tmp, final_name=f"{oid}-A.pdf")
-        ui.notify('PDF A subido'); ui.run_javascript('window.location.reload()')
+def db_list_orders() -> list[sqlite3.Row]:
+    conn = db_connect()
+    rows = conn.execute('SELECT * FROM orders ORDER BY datetime(created) DESC').fetchall()
+    conn.close()
+    return rows
 
-    async def on_pdf_b(e):
-        up = e
-        if Path(up.name).suffix.lower() != '.pdf':
-            ui.notify('Solo PDF', color='warning'); return
-        tmp = DATA_DIR / f"pdfB-{uuid.uuid4()}.pdf"
-        with open(tmp, 'wb') as f: f.write(up.content.read())
-        add_file(oid, 'pdf_b', tmp, final_name=f"{oid}-B.pdf")
-        ui.notify('PDF B subido'); ui.run_javascript('window.location.reload()')
 
-    async def on_pdf_single(e):
-        up = e
-        if Path(up.name).suffix.lower() != '.pdf':
-            ui.notify('Solo PDF', color='warning'); return
-        tmp = DATA_DIR / f"pdf-{uuid.uuid4()}.pdf"
-        with open(tmp, 'wb') as f: f.write(up.content.read())
-        add_file(oid, 'pdf_a', tmp, final_name=f"{oid}.pdf")  # reutilizamos slot A
-        ui.notify('PDF subido'); ui.run_javascript('window.location.reload()')
+def db_get_order(oid: str) -> tuple[Order, list[Item]]:
+    conn = db_connect()
+    order_row = conn.execute('SELECT * FROM orders WHERE id=?', (oid,)).fetchone()
+    if not order_row:
+        raise KeyError('order not found')
+    item_rows = conn.execute('SELECT * FROM order_items WHERE order_id=?', (oid,)).fetchall()
+    conn.close()
+    order = Order(
+        id=order_row['id'],
+        order_number=order_row['order_number'],
+        created=datetime.fromisoformat(order_row['created']).date(),
+        client=order_row['client'],
+        email=order_row['email'],
+        cover=order_row['cover'],
+        size=order_row['size'],
+        pages=order_row['pages'],
+        language=order_row['language'],
+        tags=set(filter(None, (order_row['tags'] or '').split(','))),
+        notes=order_row['notes'],
+        status=order_row['status'],
+        error_message=order_row['error_message'],
+        generated_at=datetime.fromisoformat(order_row['generated_at']) if order_row['generated_at'] else None,
+        output_dir=order_row['output_dir'],
+        output_zip=order_row['output_zip']
+    )
+    items = [Item(sku=r['sku'], qty=r['qty'], language=r['language'],
+                  title=r['title'], personalization=r['personalization'],
+                  pages=r['pages']) for r in item_rows]
+    return order, items
 
-    if is_hd_24:
-        ui.upload('PDF Parte A (pï¿½gs. 1-12)', on_upload=on_pdf_a).props('accept=.pdf')
-        ui.upload('PDF Parte B (pï¿½gs. 13-24)', on_upload=on_pdf_b).props('accept=.pdf')
-    else:
-        ui.upload('PDF final', on_upload=on_pdf_single).props('accept=.pdf')
 
-    # botï¿½n procesar (sï¿½lo si requisitos cumplidos)
-    def can_process():
-        if not needed_voices_ok:
-            return False, 'Falta archivo de voz'
-        if is_hd_24:
-            have_a = bool(files_for_order(oid, 'pdf_a'))
-            have_b = bool(files_for_order(oid, 'pdf_b'))
-            return (have_a and have_b), 'Sube A y B' if not (have_a and have_b) else ''
-        else:
-            have = bool(files_for_order(oid, 'pdf_a'))
-            return have, 'Sube PDF'
-    ok, msg = can_process()
+def db_update_status(oid: str, status: str, error_message: str | None = None,
+                     output_dir: str | None = None, output_zip: str | None = None) -> None:
+    conn = db_connect()
+    params: list[Any] = [status, error_message, output_dir, output_zip]
+    sql = 'UPDATE orders SET status=?, error_message=?, output_dir=?, output_zip=?'
+    if status == 'done':
+        sql += ', generated_at=?'
+        params.append(datetime.now().isoformat())
+    sql += ' WHERE id=?'
+    params.append(oid)
+    conn.execute(sql, params)
+    conn.commit()
+    conn.close()
 
-    def run_pipeline():
-        # input(s)
-        if is_hd_24:
-            fA = Path(files_for_order(oid, 'pdf_a')[0]['path'])
-            fB = Path(files_for_order(oid, 'pdf_b')[0]['path'])
-            merged = DATA_DIR / f"{oid}-merged.pdf"
-            # unir A+B (sin cambios)
-            with pikepdf.open(str(fA)) as A, pikepdf.open(str(fB)) as B, pikepdf.new() as out:
-                for p in A.pages: out.pages.append(p)
-                for p in B.pages: out.pages.append(p)
-                out.save(str(merged))
-            source_pdf = merged
-            cover_pages = 1  # asumimos 1 portada
-        else:
-            source_pdf = Path(files_for_order(oid, 'pdf_a')[0]['path'])
-            cover_pages = 1
+# ---------------------------------------------------------------------------
+# Parsing helpers
 
-        # B/N excepto portada
-        gray_pdf = DATA_DIR / f"{oid}-gray.pdf"
-        did_gray = grayscale_except_cover(source_pdf, cover_pages, gray_pdf)
-        if not did_gray:
-            ui.notify('Ghostscript no encontrado: PDF se mantiene en color', color='warning', timeout=6000)
 
-        # QR si procede
-        final_pdf = DOWNLOAD_DIR / f"{oid}-FINAL.pdf"
-        if wants_qr:
-            qr_value = f"endless://order/{r['order_code'] or oid}"
-            add_qr_page(gray_pdf, qr_value, final_pdf)
-        else:
-            shutil.copyfile(gray_pdf, final_pdf)
-
-        add_file(oid, 'processed_pdf', final_pdf, final_name=final_pdf.name)
-        conn = db()
-        conn.execute("UPDATE orders SET status=? WHERE id=?", ('processed', oid))
-        conn.commit(); conn.close()
-        ui.notify('PDF procesado y disponible en Descargas', color='positive')
-        ui.run_javascript('window.location.reload()')
-
-    ui.separator()
-    with ui.row().classes('items-center'):
-        ui.button('Procesar PDF', on_click=run_pipeline, color='primary', disabled=(not ok))
-        if not ok and msg:
-            ui.label(f'? {msg}').classes('text-amber-700')
-
-    # vï¿½nculos de archivos del pedido
-    with ui.expansion('Archivos del pedido', icon='folder').classes('mt-2').props('expand-separator'):
-        for f in files_for_order(oid):
-            ui.link(f['filename'], serve_path(Path(f['path']), f['filename']), new_tab=True)
-
-# ------------------ Rutas ------------------
-
-def parse_orders(temp_path: Path):
-    ext = temp_path.suffix.lower()
+def parse_items(raw: str) -> list[Item]:
+    items: list[Item] = []
+    raw = raw.strip()
+    if not raw:
+        return items
     try:
-        if ext == ".csv":
-            try:
-                df = pd.read_csv(temp_path, encoding="utf-8-sig")
-            except Exception:
-                df = pd.read_csv(temp_path, encoding="latin1")
+        if raw.startswith('[') or raw.startswith('{'):
+            data = json.loads(raw)
+            for d in data:
+                items.append(Item(
+                    sku=str(d.get('sku')),
+                    qty=int(d.get('qty', 1)),
+                    language=d.get('language'),
+                    title=d.get('title'),
+                    personalization=d.get('personalization'),
+                    pages=d.get('pages')
+                ))
+            return items
+    except Exception:
+        pass
+    # DSL SKU:QTY@lang#title#personalization | ...
+    parts = [p.strip() for p in raw.split('|') if p.strip()]
+    for part in parts:
+        sku_qty, *after_at = part.split('@', 1)
+        if ':' in sku_qty:
+            sku_part, qty_str = sku_qty.split(':', 1)
+            qty = int(qty_str or 1)
         else:
-            df = pd.read_excel(temp_path)
-    except Exception as e:
-        ui.notify(f"Error leyendo archivo: {e}", color="negative")
-        return 0
-    n = 0
-    for row in df.fillna("").to_dict("records"):
+            sku_part = sku_qty
+            qty = 1
+        lang = title = pers = None
+        if after_at:
+            lang_title = after_at[0].split('#')
+            if len(lang_title) > 0:
+                lang = lang_title[0] or None
+            if len(lang_title) > 1:
+                title = lang_title[1] or None
+            if len(lang_title) > 2:
+                pers = lang_title[2] or None
+        items.append(Item(sku=sku_part, qty=qty, language=lang, title=title,
+                          personalization=pers))
+    return items
+
+
+COLUMN_ALIASES = {
+    'order_number': ['order', 'order_number'],
+    'client': ['client', 'cliente', 'name'],
+    'email': ['email'],
+    'items': ['items'],
+    'cover': ['cover'],
+    'size': ['size'],
+    'pages': ['pages'],
+    'language': ['language', 'lang'],
+    'tags': ['tags'],
+    'notes': ['notes'],
+    'created': ['created']
+}
+
+
+def _col(row: dict, key: str) -> Any:
+    for alt in COLUMN_ALIASES[key]:
+        if alt in row and pd.notna(row[alt]):
+            return row[alt]
+    return None
+
+
+def parse_orders(temp_path: Path) -> list[str]:
+    if temp_path.suffix.lower() in {'.xlsx', '.xls'}:
+        df = pd.read_excel(temp_path)
+    else:
         try:
-            upsert_order(row)
-            n += 1
-        except Exception as e:
-            ui.notify(f"Fila con error: {e}", color="warning", timeout=6000)
-    return n
-def import_block():
-    """Bloque UI para importar pedidos desde CSV/Excel sin endpoints FastAPI."""
-    import tempfile
-    from nicegui import events
-    from pathlib import Path
-
-    status = ui.label('Selecciona un CSV o Excel').classes('text-secondary')
-
-    def on_upload(e: events.UploadEventArguments):
+            df = pd.read_csv(temp_path, encoding='utf-8-sig')
+        except Exception:
+            df = pd.read_csv(temp_path, encoding='latin1')
+    ids: list[str] = []
+    for _, row in df.iterrows():
+        data = row.to_dict()
+        items = parse_items(str(_col(data, 'items') or ''))
+        pages = _col(data, 'pages')
+        if pages is None:
+            pages = sum((it.pages or 0) * it.qty for it in items)
         try:
-            if not e or not getattr(e, "name", None):
-                ui.notify("No se recibió archivo", color="warning")
-                return
-            suffix = Path(e.name).suffix or ".csv"
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(e.content.read())
-                temp_path = Path(tmp.name)
-
-            count = parse_orders(temp_path)
-            status.set_text(f"Importadas {count} filas")
-            ui.notify(f"Importadas {count} filas", color="positive")
-
-        except Exception as ex:
-            ui.notify(f"Error importando: {ex}", color="negative")
-
-        finally:
+            pages = int(pages)
+        except Exception:
+            pages = 0
+        tags = set()
+        tags_raw = str(_col(data, 'tags') or '')
+        if tags_raw:
+            tags = {t.strip().lower() for t in tags_raw.split(',') if t.strip()}
+        created_val = _col(data, 'created')
+        if created_val:
             try:
-                temp_path.unlink(missing_ok=True)
+                created = datetime.fromisoformat(str(created_val)).date()
             except Exception:
-                pass
+                created = date.today()
+        else:
+            created = date.today()
+        order = Order(
+            id='',
+            order_number=str(_col(data, 'order_number') or ''),
+            created=created,
+            client=str(_col(data, 'client') or ''),
+            email=str(_col(data, 'email') or ''),
+            cover=str(_col(data, 'cover') or ''),
+            size=str(_col(data, 'size') or ''),
+            pages=pages,
+            language=_col(data, 'language'),
+            tags=tags,
+            notes=str(_col(data, 'notes') or '') or None
+        )
+        oid = db_upsert_order(order, items)
+        ids.append(oid)
+    return ids
 
-    ui.upload(
-        label="Sube CSV o Excel",
-        auto_upload=True,
-        on_upload=on_upload
-    ).props('accept=.csv,.xlsx,.xls').classes('w-full')
+# ---------------------------------------------------------------------------
+# PDF generation
+SIZE_MAP = {
+    '5x5': (5*inch, 5*inch),
+    '5x8': (5*inch, 8*inch),
+    '6x9': (6*inch, 9*inch),
+    '7x10': (7*inch, 10*inch),
+    '8x8': (8*inch, 8*inch),
+}
+
+
+def generate_order_pdf(order_uuid: str) -> Path:
+    order, items = db_get_order(order_uuid)
+    folder = DOWNLOAD_DIR / f"{order.order_number}_{order_uuid[:8]}"
+    folder.mkdir(parents=True, exist_ok=True)
+    pagesize = SIZE_MAP.get(order.size.lower(), (6*inch, 9*inch))
+    # interior
+    interior_path = folder / 'interior.pdf'
+    c = canvas.Canvas(str(interior_path), pagesize=pagesize)
+    for it in items:
+        for i in range(it.qty):
+            text = c.beginText(40, pagesize[1]-40)
+            text.textLine(f'SKU: {it.sku}')
+            text.textLine(f'Cantidad: {it.qty}')
+            if it.title:
+                text.textLine(f'Título: {it.title}')
+            if it.personalization:
+                text.textLine(f'Perso: {it.personalization}')
+            c.drawText(text)
+            c.showPage()
+    c.save()
+    # cover
+    cover_path = folder / 'cover.pdf'
+    c = canvas.Canvas(str(cover_path), pagesize=pagesize)
+    text = c.beginText(40, pagesize[1]-40)
+    if items and items[0].title:
+        text.textLine(items[0].title)
+    text.textLine(order.client)
+    text.textLine(f'Pedido {order.order_number}')
+    text.textLine(order.created.isoformat())
+    c.drawText(text)
+    c.showPage()
+    if 'qr' in order.tags:
+        qr_img = qrcode.make(f"https://example.com/order/{order.order_number}")
+        qr_path = folder / 'qr.png'
+        qr_img.save(qr_path)
+        c.drawImage(str(qr_path), pagesize[0]/2-72, pagesize[1]/2-72, 144, 144)
+    c.save()
+    # invoice
+    if 'invoice' in order.tags:
+        invoice_path = folder / 'invoice.pdf'
+        c = canvas.Canvas(str(invoice_path), pagesize=pagesize)
+        c.drawString(40, pagesize[1]-40, f'Factura de {order.client} - {order.order_number}')
+        c.showPage()
+        c.save()
+    db_update_status(order_uuid, 'done', output_dir=str(folder.relative_to(DOWNLOAD_DIR)))
+    return folder
+
+
+def generate_many(order_ids: list[str]) -> Path:
+    zip_name = f'lote_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+    zip_path = DOWNLOAD_DIR / zip_name
+    paths = []
+    for oid in order_ids:
+        try:
+            db_update_status(oid, 'generating')
+            folder = generate_order_pdf(oid)
+            paths.append(folder)
+        except Exception as e:
+            logger.exception('error generating %s', oid)
+            db_update_status(oid, 'error', error_message=str(e))
+    with zipfile.ZipFile(zip_path, 'w') as z:
+        for p in paths:
+            for f in p.rglob('*'):
+                z.write(f, arcname=p.name + '/' + f.name)
+    for oid in order_ids:
+        order, _ = db_get_order(oid)
+        if order.status == 'done':
+            db_update_status(oid, 'done', output_zip=str(zip_path.relative_to(DOWNLOAD_DIR)))
+    return zip_path
+
+# ---------------------------------------------------------------------------
+# UI components
+
+def import_block() -> None:
+    async def handle_upload(e: ui.UploadEventArguments) -> None:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=e.name) as tmp:
+            tmp.write(e.content.read())
+            tmp_path = Path(tmp.name)
+        ids = parse_orders(tmp_path)
+        ui.notify(f'Se importaron {len(ids)} pedidos')
+    with ui.card().classes('p-4'):
+        ui.label('Importar pedidos (CSV/Excel)')
+        ui.upload(on_upload=handle_upload, multiple=False, auto_upload=True)
+
+
+selected_orders: list[str] = []
+
+
+def show_order_dialog(order_id: str) -> None:
+    order, items = db_get_order(order_id)
+    with ui.dialog() as dialog, ui.card():
+        ui.label(f'Pedido {order.order_number}').classes('text-lg')
+        ui.label(f'Cliente: {order.client}')
+        ui.label(f'Email: {order.email}')
+        ui.label(f'Tags: {", ".join(sorted(order.tags))}')
+        if order.notes:
+            ui.label(f'Notas: {order.notes}')
+        if order.status == 'error' and order.error_message:
+            ui.label(f'Error: {order.error_message}').classes('text-red')
+        with ui.table(columns=[
+                {'name': 'sku', 'label': 'SKU', 'field': 'sku'},
+                {'name': 'qty', 'label': 'Cant', 'field': 'qty'},
+                {'name': 'title', 'label': 'Título', 'field': 'title'},
+            ],
+            rows=[{'sku': it.sku, 'qty': it.qty, 'title': it.title or ''} for it in items]):
+            pass
+        with ui.row():
+            ui.button('Generar este pedido', on_click=lambda: generate_one(order_id, dialog))
+            if order.output_dir:
+                ui.button('Abrir carpeta de salida',
+                          on_click=lambda: ui.open(f'/static/downloads/{order.output_dir}'))
+            ui.button('Marcar como pendiente', on_click=lambda: (db_update_status(order_id,'pending'), ui.notify('Estado actualizado')))
+            ui.button('Cerrar', on_click=dialog.close)
+    dialog.open()
+
+
+def generate_one(order_id: str, dialog: ui.dialog) -> None:
+    try:
+        db_update_status(order_id, 'generating')
+        generate_order_pdf(order_id)
+        ui.notify('Generado')
+    except Exception as e:
+        db_update_status(order_id, 'error', error_message=str(e))
+        ui.notify('Error al generar', type='negative')
+    dialog.close()
 
 
 @ui.page('/')
-def home():
-    header()
-    with ui.column().classes('max-w-5xl mx-auto'):
-        import_block()
-        ui.separator()
-        ui.element('a').props('id=pedidos')
-        page_list_orders()
+def page_list_orders() -> None:
+    global selected_orders
+    selected_orders = []
+    rows = [dict(r) for r in db_list_orders()]
+    columns = [
+        {'name': 'select', 'label': '', 'field': 'id', 'sortable': False},
+        {'name': 'order_number', 'label': 'Pedido', 'field': 'order_number'},
+        {'name': 'client', 'label': 'Cliente', 'field': 'client'},
+        {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
+        {'name': 'status', 'label': 'Status', 'field': 'status'},
+    ]
+    def on_selection(e: dict) -> None:
+        selected_orders[:] = e.get('selection', [])
 
-@ui.page('/order/{oid}')
-def order_detail(oid: str):
-    header()
-    with ui.column().classes('max-w-5xl mx-auto'):
-        order_page(oid)
+    def on_row_click(e: dict) -> None:
+        show_order_dialog(e['row']['id'])
 
-def main():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    init_db()
-    ui.run(reload=False, host='0.0.0.0', port=8090)
+    with ui.row().classes('items-center'):
+        ui.button('Generar seleccionados', on_click=lambda: generate_selected())
+        ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
+        ui.button('Refrescar', on_click=lambda: ui.open('/'))
+    ui.table(
+        columns=columns,
+        rows=rows,
+        row_key='id',
+        selection='multiple',
+        on_select=on_selection,
+        on_row_click=on_row_click,
+    )
+    import_block()
 
-if __name__ == '__main__':
-    main()
+
+def generate_selected() -> None:
+    if not selected_orders:
+        ui.notify('No hay pedidos seleccionados')
+        return
+    try:
+        generate_many(selected_orders)
+        ui.notify('Pedidos generados')
+    except Exception as e:
+        ui.notify(f'Error: {e}', type='negative')
+
+
+# descargas page
+
+@ui.page('/descargas')
+def page_downloads() -> None:
+    files = sorted(DOWNLOAD_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+    ui.label('Descargas').classes('text-lg')
+    for f in files:
+        with ui.row():
+            ui.button(f.name, on_click=lambda f=f: ui.open(f'/static/downloads/{f.name}'))
+            ui.label(datetime.fromtimestamp(f.stat().st_mtime).isoformat())
+            ui.label(f'{f.stat().st_size} bytes')
+            ui.button('Borrar', on_click=lambda f=f: (f.unlink(), ui.open('/descargas')))
+
+
+# ---------------------------------------------------------------------------
+# API
+
+
+@app.get('/api/orders')
+def api_orders(request: Request, status: str | None = None, q: str | None = None):
+    rows = [dict(r) for r in db_list_orders()]
+    if status:
+        rows = [r for r in rows if r['status'] == status]
+    if q:
+        rows = [r for r in rows if q.lower() in r['order_number'].lower()]
+    return JSONResponse(rows)
+
+
+@app.post('/api/generate')
+async def api_generate(data: dict):
+    ids = data.get('ids', [])
+    path = generate_many(ids)
+    return {'zip_path': f'/static/downloads/{path.name}'}
+
+
+@app.get('/api/export.csv')
+def api_export_csv():
+    rows = db_list_orders()
+    def gen():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['order_number','client','email','cover','size','pages','language','tags','notes','status'])
+        for r in rows:
+            writer.writerow([r['order_number'], r['client'], r['email'], r['cover'], r['size'],
+                             r['pages'], r['language'], r['tags'], r['notes'], r['status']])
+        yield output.getvalue()
+    return StreamingResponse(gen(), media_type='text/csv', headers={'Content-Disposition':'attachment; filename="orders.csv"'})
+
+
+# ---------------------------------------------------------------------------
+# Run
+
+if __name__ in {'__main__', '__mp_main__'}:
+    db_init()
+    ui.run(host=os.getenv('ECS_HOST', '0.0.0.0'), port=int(os.getenv('ECS_PORT', 8080)))
