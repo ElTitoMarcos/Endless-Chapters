@@ -103,6 +103,7 @@ COL_ALIASES = {
     'voice_name': ['voice_name', 'voice'],
     'voice_seed': ['voice_seed', 'voice_id'],
     'voice_text': ['voice_text', 'text'],
+    'voice_sample': ['voice_sample', 'voice_clone', 'voice_file'],
 }
 
 
@@ -138,6 +139,7 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'voice_name': str(_val(data, COL_ALIASES['voice_name']) or ''),
             'voice_seed': str(_val(data, COL_ALIASES['voice_seed']) or ''),
             'voice_text': str(_val(data, COL_ALIASES['voice_text']) or ''),
+            'voice_sample': str(_val(data, COL_ALIASES['voice_sample']) or ''),
         }
         rows.append(row)
     return rows
@@ -155,6 +157,11 @@ def synth_voice(row: dict, out_dir: Path) -> Path | None:
     text = row['voice_text']
     provider = VOICE_PROVIDER
     try:
+        if row.get('voice_sample'):
+            from TTS.api import TTS
+            tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+            tts.tts_to_file(text=text, speaker_wav=row['voice_sample'], language="es", file_path=str(out_path))
+            return out_path
         if provider == 'elevenlabs' and XI_API_KEY:
             import requests
             voice_id = row.get('voice_seed') or '21m00Tcm4TlvDq8ikWAM'
@@ -191,7 +198,7 @@ def synth_voice(row: dict, out_dir: Path) -> Path | None:
 # Bundle generation
 
 
-def generate_order_bundle(row: dict, base_out: Path) -> Path:
+def generate_order_bundle(row: dict, base_out: Path) -> tuple[Path, Path]:
     work_dir = ensure_dir(base_out / f"order_{row['order']}_{row['id']}")
     docs_dir = ensure_dir(work_dir / 'docs')
     qr_dir = work_dir / 'qr'
@@ -227,7 +234,7 @@ def generate_order_bundle(row: dict, base_out: Path) -> Path:
 
     zip_path = base_out / f"order_{row['order']}.zip"
     zip_dir(work_dir, zip_path)
-    return zip_path
+    return work_dir, zip_path
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +297,7 @@ async def handle_upload(e: UploadEventArguments) -> None:
 def import_block() -> None:
     with ui.card().classes('p-4'):
         ui.label('Importar pedidos (CSV/Excel)')
-        ui.upload(on_upload=handle_upload, auto_upload=True, accept='.csv,.xlsx,.xls')
+        ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
 
 
 def load_sample_orders() -> None:
@@ -340,10 +347,10 @@ async def generate_selected() -> None:
     for i, row in enumerate(rows, 1):
         try:
             audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
-            synth_voice(row, audio_dir)
-            zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
+            audio_path = synth_voice(row, audio_dir)
+            work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
             row['status'] = 'ready'
-            DOWNLOADS.append({'order': row['order'], 'zip': zip_path})
+            DOWNLOADS.append({'order': row['order'], 'zip': zip_path, 'dir': work_dir, 'audio': audio_path})
         except Exception as e:
             row['status'] = 'error'
             row['error'] = str(e)
@@ -363,9 +370,15 @@ def render_downloads() -> None:
         ui.label('Descargas').classes('text-lg')
         for d in DOWNLOADS:
             path = Path(d['zip']).name
+            folder = Path(d['dir']).name if d.get('dir') else ''
             with ui.row():
                 ui.label(f"Pedido {d['order']}")
-                ui.button('Descargar ZIP', on_click=lambda p=path: ui.open(f'/downloads/{p}'))
+                ui.button('Descargar ZIP', on_click=lambda p=path: ui.download(f'/downloads/{p}'))
+                if folder:
+                    ui.link('Ver cover', f'/downloads/{folder}/docs/cover.pdf', new_tab=True)
+                    ui.link('Ver interior', f'/downloads/{folder}/docs/interior.pdf', new_tab=True)
+                    if d.get('audio'):
+                        ui.link('Escuchar audio', f'/downloads/{folder}/audio/voice.mp3', new_tab=True)
 @ui.page('/')
 def main_page() -> None:
     global table, download_container
@@ -385,7 +398,7 @@ def main_page() -> None:
     with ui.header().classes('items-center justify-between'):
         with ui.row():
             ui.button('GENERAR SELECCIONADOS', on_click=generate_selected)
-            ui.button('EXPORTAR CSV', on_click=lambda: ui.open('/api/export.csv'))
+            ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
             ui.button('Cargar pedidos de prueba', on_click=load_sample_orders)
 
@@ -399,5 +412,5 @@ def main_page() -> None:
 # Run app
 
 if __name__ in {'__main__', '__mp_main__'}:
-    ui.run(host='0.0.0.0', port=8080)
+    ui.run(host='0.0.0.0', port=8080, reload=False)
 

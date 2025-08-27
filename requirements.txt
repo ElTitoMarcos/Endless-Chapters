@@ -11,3 +11,4 @@ python-multipart>=0.0.9
 pikepdf>=9.2
 pyttsx3>=2.90
 python-dotenv>=1.0
+TTS>=0.22.0
