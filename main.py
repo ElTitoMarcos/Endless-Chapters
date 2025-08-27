@@ -16,15 +16,11 @@ import pandas as pd
 import qrcode
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import LETTER
-from PIL import Image
 from dotenv import load_dotenv
 
 from nicegui import ui, app
 from nicegui.events import UploadEventArguments, TableSelectionEventArguments
-from fastapi import Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from starlette.staticfiles import StaticFiles
-
 
 # ---------------------------------------------------------------------------
 # Environment & paths
@@ -43,8 +39,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # serve downloads statically
-app.add_static_files('/downloads', str(DOWNLOAD_DIR), show_index=True)
-
+app.add_static_files('/downloads', str(DOWNLOAD_DIR))
 
 # ---------------------------------------------------------------------------
 # Utility helpers
@@ -72,7 +67,6 @@ def simple_pdf(text: str, out_pdf: Path, qr_png: Path | None = None) -> None:
     c.showPage()
     c.save()
 
-
 def zip_dir(src: Path, zip_path: Path) -> None:
     ensure_dir(zip_path.parent)
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -80,6 +74,12 @@ def zip_dir(src: Path, zip_path: Path) -> None:
             if p.is_file():
                 z.write(p, p.relative_to(src))
 
+def zip_dir(src: Path, zip_path: Path) -> None:
+    ensure_dir(zip_path.parent)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
+        for p in src.rglob('*'):
+            if p.is_file():
+                z.write(p, p.relative_to(src))
 
 # ---------------------------------------------------------------------------
 # Data model in memory
@@ -243,8 +243,6 @@ def api_import(temp_path: str):
     except Exception as e:
         logger.exception('import failed')
         return JSONResponse({'error': str(e)}, status_code=400)
-
-
 @app.get('/api/export.csv')
 def api_export_csv() -> StreamingResponse:
     def gen():
@@ -275,7 +273,6 @@ def refresh_table() -> None:
     table.rows = ORDERS
     table.update()
 
-
 async def handle_upload(e: UploadEventArguments) -> None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(e.name).suffix) as tmp:
         tmp.write(e.content.read())
@@ -289,7 +286,6 @@ async def handle_upload(e: UploadEventArguments) -> None:
         return
     ui.notify(f"{len(data['rows'])} filas importadas")
     refresh_table()
-
 
 def import_block() -> None:
     with ui.card().classes('p-4'):
@@ -370,8 +366,6 @@ def render_downloads() -> None:
             with ui.row():
                 ui.label(f"Pedido {d['order']}")
                 ui.button('Descargar ZIP', on_click=lambda p=path: ui.open(f'/downloads/{p}'))
-
-
 @ui.page('/')
 def main_page() -> None:
     global table, download_container
@@ -398,7 +392,6 @@ def main_page() -> None:
     table = ui.table(columns=columns, rows=ORDERS, row_key='id', selection='multiple', on_select=on_select)
 
     import_block()
-
     download_container = ui.column()
 
 
