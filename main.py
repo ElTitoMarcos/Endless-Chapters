@@ -154,7 +154,6 @@ def db_upsert_order(order: Order, items: list[Item]) -> str:
     conn.close()
     return order.id
 
-
 def db_list_orders() -> list[sqlite3.Row]:
     conn = db_connect()
     rows = conn.execute('SELECT * FROM orders ORDER BY datetime(created) DESC').fetchall()
@@ -462,8 +461,8 @@ def generate_one(order_id: str, dialog: ui.dialog) -> None:
         ui.notify('Error al generar', type='negative')
     dialog.close()
 
-
 @ui.page('/')
+
 def page_list_orders() -> None:
     global selected_orders
     selected_orders = []
@@ -495,7 +494,6 @@ def page_list_orders() -> None:
     )
     import_block()
 
-
 def generate_selected() -> None:
     if not selected_orders:
         ui.notify('No hay pedidos seleccionados')
@@ -505,7 +503,6 @@ def generate_selected() -> None:
         ui.notify('Pedidos generados')
     except Exception as e:
         ui.notify(f'Error: {e}', type='negative')
-
 
 # descargas page
 
@@ -520,11 +517,6 @@ def page_downloads() -> None:
             ui.label(f'{f.stat().st_size} bytes')
             ui.button('Borrar', on_click=lambda f=f: (f.unlink(), ui.open('/descargas')))
 
-
-# ---------------------------------------------------------------------------
-# API
-
-
 @app.get('/api/orders')
 def api_orders(request: Request, status: str | None = None, q: str | None = None):
     rows = [dict(r) for r in db_list_orders()]
@@ -534,6 +526,30 @@ def api_orders(request: Request, status: str | None = None, q: str | None = None
         rows = [r for r in rows if q.lower() in r['order_number'].lower()]
     return JSONResponse(rows)
 
+
+@app.post('/api/generate')
+async def api_generate(data: dict):
+    ids = data.get('ids', [])
+    path = generate_many(ids)
+    return {'zip_path': f'/static/downloads/{path.name}'}
+
+
+@app.get('/api/export.csv')
+def api_export_csv():
+    rows = db_list_orders()
+    def gen():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['order_number','client','email','cover','size','pages','language','tags','notes','status'])
+        for r in rows:
+            writer.writerow([r['order_number'], r['client'], r['email'], r['cover'], r['size'],
+                             r['pages'], r['language'], r['tags'], r['notes'], r['status']])
+        yield output.getvalue()
+    return StreamingResponse(gen(), media_type='text/csv', headers={'Content-Disposition':'attachment; filename="orders.csv"'})
+
+
+# ---------------------------------------------------------------------------
+# Run
 
 @app.post('/api/generate')
 async def api_generate(data: dict):
