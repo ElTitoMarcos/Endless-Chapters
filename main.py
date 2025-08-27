@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, date
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Callable
 import uuid
 import sqlite3
 import zipfile
@@ -255,7 +255,7 @@ def parse_items(raw: str) -> list[Item]:
 
 
 COLUMN_ALIASES = {
-    'order_number': ['order', 'order_number'],
+    'order_number': ['order', 'order_number', 'order_id'],
     'client': ['client', 'cliente', 'name'],
     'email': ['email'],
     'items': ['items'],
@@ -408,12 +408,13 @@ def generate_many(order_ids: list[str]) -> Path:
 # ---------------------------------------------------------------------------
 # UI components
 
-def import_block() -> None:
+def import_block(refresh: Callable[[], None]) -> None:
     async def handle_upload(e: ui.UploadEventArguments) -> None:
         with tempfile.NamedTemporaryFile(delete=False, suffix=e.name) as tmp:
             tmp.write(e.content.read())
             tmp_path = Path(tmp.name)
         ids = parse_orders(tmp_path)
+        refresh()
         ui.notify(f'Se importaron {len(ids)} pedidos')
     with ui.card().classes('p-4'):
         ui.label('Importar pedidos (CSV/Excel)')
@@ -460,7 +461,6 @@ def generate_one(order_id: str, dialog: ui.dialog) -> None:
         db_update_status(order_id, 'error', error_message=str(e))
         ui.notify('Error al generar', type='negative')
     dialog.close()
-
 @ui.page('/')
 def page_list_orders() -> None:
     global selected_orders
@@ -491,8 +491,12 @@ def page_list_orders() -> None:
         on_select=on_selection,
     )
     table.on('rowClick', on_row_click)
-    import_block()
 
+    def refresh_table() -> None:
+        table.rows = [dict(r) for r in db_list_orders()]
+        table.update()
+
+    import_block(refresh_table)
 
 def generate_selected() -> None:
     if not selected_orders:
@@ -531,19 +535,6 @@ def api_orders(request: Request, status: str | None = None, q: str | None = None
     if q:
         rows = [r for r in rows if q.lower() in r['order_number'].lower()]
     return JSONResponse(rows)
-    with ui.row().classes('items-center'):
-        ui.button('Generar seleccionados', on_click=lambda: generate_selected())
-        ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
-        ui.button('Refrescar', on_click=lambda: ui.open('/'))
-    ui.table(
-        columns=columns,
-        rows=rows,
-        row_key='id',
-        selection='multiple',
-        on_select=on_selection,
-        on_row_click=on_row_click,
-    )
-    import_block()
 @app.post('/api/generate')
 async def api_generate(data: dict):
     ids = data.get('ids', [])
