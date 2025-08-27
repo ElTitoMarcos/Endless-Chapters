@@ -4,280 +4,113 @@ import os
 import csv
 import json
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, date
-from pathlib import Path
-from typing import Optional, Any, Callable
-import uuid
-import sqlite3
-import zipfile
 import tempfile
+import uuid
+import zipfile
 import io
+from pathlib import Path
+from datetime import datetime
+from typing import Any, Iterable
 
 import pandas as pd
-from nicegui import ui, app
-from nicegui.events import TableSelectionEventArguments
-from fastapi import Request
-from fastapi.responses import StreamingResponse, JSONResponse
-from starlette.staticfiles import StaticFiles
 import qrcode
 from reportlab.pdfgen import canvas
-from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import LETTER
+from dotenv import load_dotenv
+
+from nicegui import ui, app
+from nicegui.events import UploadEventArguments, TableSelectionEventArguments
+from fastapi.responses import JSONResponse, StreamingResponse
+
 
 # ---------------------------------------------------------------------------
-# Paths and logging
+# Environment & paths
 BASE_DIR = Path(__file__).parent.resolve()
-DATA_DIR = BASE_DIR / 'data'
+ASSETS_DIR = BASE_DIR / 'assets'
 DOWNLOAD_DIR = BASE_DIR / 'downloads'
-DB_PATH = DATA_DIR / 'orders.db'
-DATA_DIR.mkdir(exist_ok=True)
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
-logging.basicConfig(
-    filename=DATA_DIR / 'app.log',
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s'
-)
+load_dotenv()
+VOICE_PROVIDER = os.getenv('VOICE_PROVIDER', 'offline').lower()
+XI_API_KEY = os.getenv('XI_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+BASE_PUBLIC_URL = os.getenv('BASE_PUBLIC_URL', 'http://localhost:8080')
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# serve downloads
-if not any(r.path == '/static/downloads' for r in app.routes if hasattr(r, 'path')):
-    app.mount('/static/downloads', StaticFiles(directory=str(DOWNLOAD_DIR)), name='static-downloads')
-
-# ---------------------------------------------------------------------------
-# Models
-@dataclass
-class Item:
-    sku: str
-    qty: int
-    language: Optional[str] = None
-    title: Optional[str] = None
-    personalization: Optional[str] = None
-    pages: Optional[int] = None
-
-
-@dataclass
-class Order:
-    id: str
-    order_number: str
-    created: date
-    client: str
-    email: str
-    cover: str
-    size: str
-    pages: int
-    language: Optional[str] = None
-    tags: set[str] = field(default_factory=set)
-    notes: Optional[str] = None
-    status: str = 'pending'
-    error_message: Optional[str] = None
-    generated_at: Optional[datetime] = None
-    output_dir: Optional[str] = None
-    output_zip: Optional[str] = None
+# serve downloads statically
+app.add_static_files('/downloads', str(DOWNLOAD_DIR))
 
 
 # ---------------------------------------------------------------------------
-# Database helpers
-
-def db_connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Utility helpers
 
 
-def db_init() -> None:
-    conn = db_connect()
-    cur = conn.cursor()
-    cur.execute(
-        '''CREATE TABLE IF NOT EXISTS orders(
-               id TEXT PRIMARY KEY,
-               order_number TEXT UNIQUE,
-               created TEXT,
-               client TEXT,
-               email TEXT,
-               cover TEXT,
-               size TEXT,
-               pages INTEGER,
-               language TEXT,
-               tags TEXT,
-               notes TEXT,
-               status TEXT,
-               error_message TEXT,
-               generated_at TEXT,
-               output_dir TEXT,
-               output_zip TEXT
-           );'''
-    )
-    cur.execute(
-        '''CREATE TABLE IF NOT EXISTS order_items(
-               id INTEGER PRIMARY KEY AUTOINCREMENT,
-               order_id TEXT,
-               sku TEXT,
-               qty INTEGER,
-               language TEXT,
-               title TEXT,
-               personalization TEXT,
-               pages INTEGER
-           );'''
-    )
-    conn.commit()
-    conn.close()
+def ensure_dir(p: Path) -> Path:
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
-def db_upsert_order(order: Order, items: list[Item]) -> str:
-    conn = db_connect()
-    cur = conn.cursor()
-    cur.execute('SELECT id, status FROM orders WHERE order_number=?', (order.order_number,))
-    row = cur.fetchone()
-    if row:
-        order.id = row['id']
-        prev_status = row['status']
-        status = 'done' if prev_status == 'done' else 'pending'
-        cur.execute('''UPDATE orders SET created=?, client=?, email=?, cover=?, size=?,
-                       pages=?, language=?, tags=?, notes=?, status=? WHERE id=?''',
-                    (order.created.isoformat(), order.client, order.email, order.cover,
-                     order.size, order.pages, order.language,
-                     ','.join(sorted(order.tags)), order.notes, status, order.id))
-        cur.execute('DELETE FROM order_items WHERE order_id=?', (order.id,))
-    else:
-        order.id = str(uuid.uuid4())
-        cur.execute('''INSERT INTO orders(id, order_number, created, client, email, cover, size, pages,
-                       language, tags, notes, status)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',
-                    (order.id, order.order_number, order.created.isoformat(), order.client,
-                     order.email, order.cover, order.size, order.pages, order.language,
-                     ','.join(sorted(order.tags)), order.notes, order.status))
-    for it in items:
-        cur.execute('''INSERT INTO order_items(order_id, sku, qty, language, title, personalization, pages)
-                       VALUES(?,?,?,?,?,?,?)''',
-                    (order.id, it.sku, it.qty, it.language, it.title, it.personalization, it.pages))
-    conn.commit()
-    conn.close()
-    return order.id
-  
-def db_list_orders() -> list[sqlite3.Row]:
-    conn = db_connect()
-    rows = conn.execute('SELECT * FROM orders ORDER BY datetime(created) DESC').fetchall()
-    conn.close()
-    return rows
+def make_qr(url: str, out_png: Path) -> None:
+    img = qrcode.make(url)
+    ensure_dir(out_png.parent)
+    img.save(out_png)
 
 
-def db_get_order(oid: str) -> tuple[Order, list[Item]]:
-    conn = db_connect()
-    order_row = conn.execute('SELECT * FROM orders WHERE id=?', (oid,)).fetchone()
-    if not order_row:
-        raise KeyError('order not found')
-    item_rows = conn.execute('SELECT * FROM order_items WHERE order_id=?', (oid,)).fetchall()
-    conn.close()
-    order = Order(
-        id=order_row['id'],
-        order_number=order_row['order_number'],
-        created=datetime.fromisoformat(order_row['created']).date(),
-        client=order_row['client'],
-        email=order_row['email'],
-        cover=order_row['cover'],
-        size=order_row['size'],
-        pages=order_row['pages'],
-        language=order_row['language'],
-        tags=set(filter(None, (order_row['tags'] or '').split(','))),
-        notes=order_row['notes'],
-        status=order_row['status'],
-        error_message=order_row['error_message'],
-        generated_at=datetime.fromisoformat(order_row['generated_at']) if order_row['generated_at'] else None,
-        output_dir=order_row['output_dir'],
-        output_zip=order_row['output_zip']
-    )
-    items = [Item(sku=r['sku'], qty=r['qty'], language=r['language'],
-                  title=r['title'], personalization=r['personalization'],
-                  pages=r['pages']) for r in item_rows]
-    return order, items
+def simple_pdf(text: str, out_pdf: Path, qr_png: Path | None = None) -> None:
+    ensure_dir(out_pdf.parent)
+    c = canvas.Canvas(str(out_pdf), pagesize=LETTER)
+    c.setFont('Helvetica', 14)
+    c.drawString(72, 720, text)
+    if qr_png and qr_png.exists():
+        c.drawImage(str(qr_png), 450, 50, width=120, height=120,
+                    preserveAspectRatio=True, mask='auto')
+    c.showPage()
+    c.save()
 
 
-def db_update_status(oid: str, status: str, error_message: str | None = None,
-                     output_dir: str | None = None, output_zip: str | None = None) -> None:
-    conn = db_connect()
-    params: list[Any] = [status, error_message, output_dir, output_zip]
-    sql = 'UPDATE orders SET status=?, error_message=?, output_dir=?, output_zip=?'
-    if status == 'done':
-        sql += ', generated_at=?'
-        params.append(datetime.now().isoformat())
-    sql += ' WHERE id=?'
-    params.append(oid)
-    conn.execute(sql, params)
-    conn.commit()
-    conn.close()
+def zip_dir(src: Path, zip_path: Path) -> None:
+    ensure_dir(zip_path.parent)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
+        for p in src.rglob('*'):
+            if p.is_file():
+                z.write(p, p.relative_to(src))
+
 
 # ---------------------------------------------------------------------------
-# Parsing helpers
+# Data model in memory
+
+ORDERS: list[dict[str, Any]] = []
+DOWNLOADS: list[dict[str, Any]] = []
 
 
-def parse_items(raw: str) -> list[Item]:
-    items: list[Item] = []
-    raw = raw.strip()
-    if not raw:
-        return items
-    try:
-        if raw.startswith('[') or raw.startswith('{'):
-            data = json.loads(raw)
-            for d in data:
-                items.append(Item(
-                    sku=str(d.get('sku')),
-                    qty=int(d.get('qty', 1)),
-                    language=d.get('language'),
-                    title=d.get('title'),
-                    personalization=d.get('personalization'),
-                    pages=d.get('pages')
-                ))
-            return items
-    except Exception:
-        pass
-    # DSL SKU:QTY@lang#title#personalization | ...
-    parts = [p.strip() for p in raw.split('|') if p.strip()]
-    for part in parts:
-        sku_qty, *after_at = part.split('@', 1)
-        if ':' in sku_qty:
-            sku_part, qty_str = sku_qty.split(':', 1)
-            qty = int(qty_str or 1)
-        else:
-            sku_part = sku_qty
-            qty = 1
-        lang = title = pers = None
-        if after_at:
-            lang_title = after_at[0].split('#')
-            if len(lang_title) > 0:
-                lang = lang_title[0] or None
-            if len(lang_title) > 1:
-                title = lang_title[1] or None
-            if len(lang_title) > 2:
-                pers = lang_title[2] or None
-        items.append(Item(sku=sku_part, qty=qty, language=lang, title=title,
-                          personalization=pers))
-    return items
+# ---------------------------------------------------------------------------
+# Parsing
 
-
-COLUMN_ALIASES = {
-    'order_number': ['order', 'order_number', 'order_id'],
+COL_ALIASES = {
+    'created': ['created', 'fecha'],
+    'order': ['order', 'order_number', 'pedido'],
     'client': ['client', 'cliente', 'name'],
-    'email': ['email'],
-    'items': ['items'],
+    'email': ['email', 'correo'],
     'cover': ['cover'],
-    'size': ['size'],
-    'pages': ['pages'],
-    'language': ['language', 'lang'],
+    'size': ['size', 'tamaño'],
+    'pages': ['pages', 'paginas'],
     'tags': ['tags'],
-    'notes': ['notes'],
-    'created': ['created']
+    'voice_name': ['voice_name', 'voice'],
+    'voice_seed': ['voice_seed', 'voice_id'],
+    'voice_text': ['voice_text', 'text'],
 }
 
 
-def _col(row: dict, key: str) -> Any:
-    for alt in COLUMN_ALIASES[key]:
-        if alt in row and pd.notna(row[alt]):
-            return row[alt]
+def _val(data: dict, names: Iterable[str]) -> Any:
+    for n in names:
+        if n in data and pd.notna(data[n]):
+            return data[n]
     return None
 
 
-def parse_orders(temp_path: Path) -> list[str]:
+def parse_orders(temp_path: Path) -> list[dict]:
     if temp_path.suffix.lower() in {'.xlsx', '.xls'}:
         df = pd.read_excel(temp_path)
     else:
@@ -285,283 +118,290 @@ def parse_orders(temp_path: Path) -> list[str]:
             df = pd.read_csv(temp_path, encoding='utf-8-sig')
         except Exception:
             df = pd.read_csv(temp_path, encoding='latin1')
-    ids: list[str] = []
-    for _, row in df.iterrows():
-        data = row.to_dict()
-        items = parse_items(str(_col(data, 'items') or ''))
-        pages = _col(data, 'pages')
-        if pages is None:
-            pages = sum((it.pages or 0) * it.qty for it in items)
-        try:
-            pages = int(pages)
-        except Exception:
-            pages = 0
-        tags = set()
-        tags_raw = str(_col(data, 'tags') or '')
-        if tags_raw:
-            tags = {t.strip().lower() for t in tags_raw.split(',') if t.strip()}
-        created_val = _col(data, 'created')
-        if created_val:
-            try:
-                created = datetime.fromisoformat(str(created_val)).date()
-            except Exception:
-                created = date.today()
-        else:
-            created = date.today()
-        order = Order(
-            id='',
-            order_number=str(_col(data, 'order_number') or ''),
-            created=created,
-            client=str(_col(data, 'client') or ''),
-            email=str(_col(data, 'email') or ''),
-            cover=str(_col(data, 'cover') or ''),
-            size=str(_col(data, 'size') or ''),
-            pages=pages,
-            language=_col(data, 'language'),
-            tags=tags,
-            notes=str(_col(data, 'notes') or '') or None
-        )
-        oid = db_upsert_order(order, items)
-        ids.append(oid)
-    return ids
+    rows: list[dict[str, Any]] = []
+    for _, r in df.iterrows():
+        data = r.to_dict()
+        row = {
+            'id': str(uuid.uuid4()),
+            'created': str(_val(data, COL_ALIASES['created']) or datetime.now().date()),
+            'order': str(_val(data, COL_ALIASES['order']) or ''),
+            'client': str(_val(data, COL_ALIASES['client']) or ''),
+            'email': str(_val(data, COL_ALIASES['email']) or ''),
+            'cover': str(_val(data, COL_ALIASES['cover']) or ''),
+            'size': str(_val(data, COL_ALIASES['size']) or ''),
+            'pages': int(_val(data, COL_ALIASES['pages']) or 0),
+            'status': 'pending',
+            'tags': [t.strip() for t in str(_val(data, COL_ALIASES['tags']) or '').split(',') if t.strip()],
+            'voice_name': str(_val(data, COL_ALIASES['voice_name']) or ''),
+            'voice_seed': str(_val(data, COL_ALIASES['voice_seed']) or ''),
+            'voice_text': str(_val(data, COL_ALIASES['voice_text']) or ''),
+        }
+        rows.append(row)
+    return rows
+
 
 # ---------------------------------------------------------------------------
-# PDF generation
-SIZE_MAP = {
-    '5x5': (5*inch, 5*inch),
-    '5x8': (5*inch, 8*inch),
-    '6x9': (6*inch, 9*inch),
-    '7x10': (7*inch, 10*inch),
-    '8x8': (8*inch, 8*inch),
-}
+# Audio synthesis
 
 
-def generate_order_pdf(order_uuid: str) -> Path:
-    order, items = db_get_order(order_uuid)
-    folder = DOWNLOAD_DIR / f"{order.order_number}_{order_uuid[:8]}"
-    folder.mkdir(parents=True, exist_ok=True)
-    pagesize = SIZE_MAP.get(order.size.lower(), (6*inch, 9*inch))
-    # interior
-    interior_path = folder / 'interior.pdf'
-    c = canvas.Canvas(str(interior_path), pagesize=pagesize)
-    for it in items:
-        for i in range(it.qty):
-            text = c.beginText(40, pagesize[1]-40)
-            text.textLine(f'SKU: {it.sku}')
-            text.textLine(f'Cantidad: {it.qty}')
-            if it.title:
-                text.textLine(f'Título: {it.title}')
-            if it.personalization:
-                text.textLine(f'Perso: {it.personalization}')
-            c.drawText(text)
-            c.showPage()
-    c.save()
-    # cover
-    cover_path = folder / 'cover.pdf'
-    c = canvas.Canvas(str(cover_path), pagesize=pagesize)
-    text = c.beginText(40, pagesize[1]-40)
-    if items and items[0].title:
-        text.textLine(items[0].title)
-    text.textLine(order.client)
-    text.textLine(f'Pedido {order.order_number}')
-    text.textLine(order.created.isoformat())
-    c.drawText(text)
-    c.showPage()
-    if 'qr' in order.tags:
-        qr_img = qrcode.make(f"https://example.com/order/{order.order_number}")
-        qr_path = folder / 'qr.png'
-        qr_img.save(qr_path)
-        c.drawImage(str(qr_path), pagesize[0]/2-72, pagesize[1]/2-72, 144, 144)
-    c.save()
-    # invoice
-    if 'invoice' in order.tags:
-        invoice_path = folder / 'invoice.pdf'
-        c = canvas.Canvas(str(invoice_path), pagesize=pagesize)
-        c.drawString(40, pagesize[1]-40, f'Factura de {order.client} - {order.order_number}')
-        c.showPage()
-        c.save()
-    db_update_status(order_uuid, 'done', output_dir=str(folder.relative_to(DOWNLOAD_DIR)))
-    return folder
+def synth_voice(row: dict, out_dir: Path) -> Path | None:
+    if 'voice' not in row.get('tags', []) or not row.get('voice_text'):
+        return None
+    ensure_dir(out_dir)
+    out_path = out_dir / 'voice.mp3'
+    text = row['voice_text']
+    provider = VOICE_PROVIDER
+    try:
+        if provider == 'elevenlabs' and XI_API_KEY:
+            import requests
+            voice_id = row.get('voice_seed') or '21m00Tcm4TlvDq8ikWAM'
+            url = f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}'
+            headers = {'xi-api-key': XI_API_KEY}
+            payload = {'text': text, 'voice_settings': {'stability': 0.3, 'similarity_boost': 0.8}}
+            r = requests.post(url, headers=headers, json=payload)
+            if r.status_code != 200:
+                raise RuntimeError(r.text)
+            out_path.write_bytes(r.content)
+            return out_path
+        if provider == 'openai' and OPENAI_API_KEY:
+            import requests
+            voice = row.get('voice_name') or 'alloy'
+            url = 'https://api.openai.com/v1/audio/speech'
+            headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
+            payload = {'model': 'tts-1', 'input': text, 'voice': voice}
+            r = requests.post(url, headers=headers, json=payload)
+            if r.status_code != 200:
+                raise RuntimeError(r.text)
+            out_path.write_bytes(r.content)
+            return out_path
+        import pyttsx3
+        engine = pyttsx3.init()
+        engine.save_to_file(text, str(out_path))
+        engine.runAndWait()
+        return out_path
+    except Exception as e:
+        logger.error('voice synth failed: %s', e)
+        return None
 
 
-def generate_many(order_ids: list[str]) -> Path:
-    zip_name = f'lote_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
-    zip_path = DOWNLOAD_DIR / zip_name
-    paths = []
-    for oid in order_ids:
-        try:
-            db_update_status(oid, 'generating')
-            folder = generate_order_pdf(oid)
-            paths.append(folder)
-        except Exception as e:
-            logger.exception('error generating %s', oid)
-            db_update_status(oid, 'error', error_message=str(e))
-    with zipfile.ZipFile(zip_path, 'w') as z:
-        for p in paths:
-            for f in p.rglob('*'):
-                z.write(f, arcname=p.name + '/' + f.name)
-    for oid in order_ids:
-        order, _ = db_get_order(oid)
-        if order.status == 'done':
-            db_update_status(oid, 'done', output_zip=str(zip_path.relative_to(DOWNLOAD_DIR)))
+# ---------------------------------------------------------------------------
+# Bundle generation
+
+
+def generate_order_bundle(row: dict, base_out: Path) -> Path:
+    work_dir = ensure_dir(base_out / f"order_{row['order']}_{row['id']}")
+    docs_dir = ensure_dir(work_dir / 'docs')
+    qr_dir = work_dir / 'qr'
+    audio_dir = work_dir / 'audio'
+
+    audio_rel = None
+    audio_file = audio_dir / 'voice.mp3'
+    if audio_file.exists():
+        audio_rel = Path('audio/voice.mp3')
+
+    qr_png = None
+    if 'qr' in row.get('tags', []) or 'qr_audio' in row.get('tags', []):
+        qr_url = f'{BASE_PUBLIC_URL}/o/{row["order"]}'
+        if 'qr_audio' in row.get('tags', []) and audio_rel:
+            qr_url = f'{BASE_PUBLIC_URL}/downloads/{work_dir.name}/{audio_rel.as_posix()}'
+        qr_png = qr_dir / 'qr.png'
+        make_qr(qr_url, qr_png)
+
+    cover_pdf = docs_dir / 'cover.pdf'
+    interior_pdf = docs_dir / 'interior.pdf'
+    simple_pdf(f"Cover {row['order']} - {row['client']}", cover_pdf, qr_png)
+    simple_pdf(f"Interior {row['order']} - {row['client']}", interior_pdf)
+
+    manifest = dict(row)
+    manifest.update({
+        'generated_at': datetime.now().isoformat(),
+        'docs': {'cover': 'docs/cover.pdf', 'interior': 'docs/interior.pdf'},
+        'qr': 'qr/qr.png' if qr_png else None,
+        'audio': str(audio_rel) if audio_rel else None,
+    })
+    (work_dir / 'manifest.json').write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    zip_path = base_out / f"order_{row['order']}.zip"
+    zip_dir(work_dir, zip_path)
     return zip_path
 
-# ---------------------------------------------------------------------------
-# UI components
-
-def import_block(refresh: Callable[[], None]) -> None:
-    async def handle_upload(e: ui.UploadEventArguments) -> None:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=e.name) as tmp:
-            tmp.write(e.content.read())
-            tmp_path = Path(tmp.name)
-        ids = parse_orders(tmp_path)
-        refresh()
-        ui.notify(f'Se importaron {len(ids)} pedidos')
-    with ui.card().classes('p-4'):
-        ui.label('Importar pedidos (CSV/Excel)')
-        ui.upload(on_upload=handle_upload, multiple=False, auto_upload=True)
-
-
-selected_orders: list[str] = []
-
-
-def show_order_dialog(order_id: str) -> None:
-    order, items = db_get_order(order_id)
-    with ui.dialog() as dialog, ui.card():
-        ui.label(f'Pedido {order.order_number}').classes('text-lg')
-        ui.label(f'Cliente: {order.client}')
-        ui.label(f'Email: {order.email}')
-        ui.label(f'Tags: {", ".join(sorted(order.tags))}')
-        if order.notes:
-            ui.label(f'Notas: {order.notes}')
-        if order.status == 'error' and order.error_message:
-            ui.label(f'Error: {order.error_message}').classes('text-red')
-        with ui.table(columns=[
-                {'name': 'sku', 'label': 'SKU', 'field': 'sku'},
-                {'name': 'qty', 'label': 'Cant', 'field': 'qty'},
-                {'name': 'title', 'label': 'Título', 'field': 'title'},
-            ],
-            rows=[{'sku': it.sku, 'qty': it.qty, 'title': it.title or ''} for it in items]):
-            pass
-        with ui.row():
-            ui.button('Generar este pedido', on_click=lambda: generate_one(order_id, dialog))
-            if order.output_dir:
-                ui.button('Abrir carpeta de salida',
-                          on_click=lambda: ui.open(f'/static/downloads/{order.output_dir}'))
-            ui.button('Marcar como pendiente', on_click=lambda: (db_update_status(order_id,'pending'), ui.notify('Estado actualizado')))
-            ui.button('Cerrar', on_click=dialog.close)
-    dialog.open()
-
-
-def generate_one(order_id: str, dialog: ui.dialog) -> None:
-    try:
-        db_update_status(order_id, 'generating')
-        generate_order_pdf(order_id)
-        ui.notify('Generado')
-    except Exception as e:
-        db_update_status(order_id, 'error', error_message=str(e))
-        ui.notify('Error al generar', type='negative')
-    dialog.close()
-@ui.page('/')
-def page_list_orders() -> None:
-    global selected_orders
-    selected_orders = []
-    rows = [dict(r) for r in db_list_orders()]
-    columns = [
-        {'name': 'select', 'label': '', 'field': 'id', 'sortable': False},
-        {'name': 'order_number', 'label': 'Pedido', 'field': 'order_number'},
-        {'name': 'client', 'label': 'Cliente', 'field': 'client'},
-        {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
-        {'name': 'status', 'label': 'Status', 'field': 'status'},
-    ]
-
-    def on_selection(e: TableSelectionEventArguments) -> None:
-        selected_orders[:] = [row['id'] for row in e.selection]
-
-    def on_row_click(e: Any) -> None:
-        show_order_dialog(e.args[0]['row']['id'])
-
-    with ui.row().classes('items-center'):
-        ui.button('Generar seleccionados', on_click=lambda: generate_selected())
-        ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
-        ui.button('Refrescar', on_click=lambda: ui.open('/'))
-    table = ui.table(
-        columns=columns,
-        rows=rows,
-        row_key='id',
-        selection='multiple',
-        on_select=on_selection,
-    )
-    table.on('rowClick', on_row_click)
-
-    def refresh_table() -> None:
-        table.rows = [dict(r) for r in db_list_orders()]
-        table.update()
-
-    import_block(refresh_table)
-
-
-def generate_selected() -> None:
-    if not selected_orders:
-        ui.notify('No hay pedidos seleccionados')
-        return
-    try:
-        generate_many(selected_orders)
-        ui.notify('Pedidos generados')
-    except Exception as e:
-        ui.notify(f'Error: {e}', type='negative')
-
-
-# descargas page
-
-@ui.page('/descargas')
-def page_downloads() -> None:
-    files = sorted(DOWNLOAD_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
-    ui.label('Descargas').classes('text-lg')
-    for f in files:
-        with ui.row():
-            ui.button(f.name, on_click=lambda f=f: ui.open(f'/static/downloads/{f.name}'))
-            ui.label(datetime.fromtimestamp(f.stat().st_mtime).isoformat())
-            ui.label(f'{f.stat().st_size} bytes')
-            ui.button('Borrar', on_click=lambda f=f: (f.unlink(), ui.open('/descargas')))
-    import_block(refresh_table)
 
 # ---------------------------------------------------------------------------
-# API
+# API endpoints
 
 
-@app.get('/api/orders')
-def api_orders(request: Request, status: str | None = None, q: str | None = None):
-    rows = [dict(r) for r in db_list_orders()]
-    if status:
-        rows = [r for r in rows if r['status'] == status]
-    if q:
-        rows = [r for r in rows if q.lower() in r['order_number'].lower()]
-    return JSONResponse(rows)
-@app.post('/api/generate')
-async def api_generate(data: dict):
-    ids = data.get('ids', [])
-    path = generate_many(ids)
-    return {'zip_path': f'/static/downloads/{path.name}'}
+@app.get('/api/import')
+def api_import(temp_path: str):
+    try:
+        rows = parse_orders(Path(temp_path))
+        ORDERS.extend(rows)
+        return {'rows': rows}
+    except Exception as e:
+        logger.exception('import failed')
+        return JSONResponse({'error': str(e)}, status_code=400)
 
 
 @app.get('/api/export.csv')
-def api_export_csv():
-    rows = db_list_orders()
+def api_export_csv() -> StreamingResponse:
     def gen():
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(['order_number','client','email','cover','size','pages','language','tags','notes','status'])
-        for r in rows:
-            writer.writerow([r['order_number'], r['client'], r['email'], r['cover'], r['size'],
-                             r['pages'], r['language'], r['tags'], r['notes'], r['status']])
+        writer.writerow(['id', 'created', 'order', 'client', 'email', 'cover', 'size', 'pages',
+                         'status', 'tags', 'voice_name', 'voice_seed', 'voice_text'])
+        for r in ORDERS:
+            writer.writerow([
+                r['id'], r['created'], r['order'], r['client'], r['email'], r['cover'],
+                r['size'], r['pages'], r['status'], ','.join(r['tags']),
+                r['voice_name'], r['voice_seed'], r['voice_text'],
+            ])
         yield output.getvalue()
-    return StreamingResponse(gen(), media_type='text/csv', headers={'Content-Disposition':'attachment; filename="orders.csv"'})
+    headers = {'Content-Disposition': 'attachment; filename="orders.csv"'}
+    return StreamingResponse(gen(), media_type='text/csv', headers=headers)
 
 
 # ---------------------------------------------------------------------------
-# Run
+# UI
+
+selected_ids: list[str] = []
+table: ui.table
+download_container: ui.column
+
+
+def refresh_table() -> None:
+    table.rows = ORDERS
+    table.update()
+
+
+async def handle_upload(e: UploadEventArguments) -> None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(e.name).suffix) as tmp:
+        tmp.write(e.content.read())
+        temp_path = Path(tmp.name)
+    from fastapi.testclient import TestClient
+    client = TestClient(app)
+    res = client.get('/api/import', params={'temp_path': str(temp_path)})
+    data = res.json()
+    if res.status_code != 200 or 'error' in data:
+        ui.notify(f"Error importando: {data.get('error', 'desconocido')}", type='negative')
+        return
+    ui.notify(f"{len(data['rows'])} filas importadas")
+    refresh_table()
+
+
+def import_block() -> None:
+    with ui.card().classes('p-4'):
+        ui.label('Importar pedidos (CSV/Excel)')
+        ui.upload(on_upload=handle_upload, auto_upload=True, accept='.csv,.xlsx,.xls')
+
+
+def load_sample_orders() -> None:
+    samples = [
+        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com', 'pages': 12, 'size': '7x10 espiral',
+         'tags': ['qr', 'voice', 'qr_audio'], 'voice_name': 'Luz',
+         'voice_text': 'Hola, este es tu audiolibro...'},
+        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com', 'pages': 20, 'size': '8x8 hardcover',
+         'tags': ['voice'], 'voice_name': 'Carlos', 'voice_text': 'Este es un mensaje sin QR.'},
+        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com', 'pages': 32, 'size': '5x8 paperback',
+         'tags': ['qr']},
+        {'order': '1004', 'client': 'Diego', 'email': '', 'pages': 40, 'size': '7x10 espiral',
+         'tags': ['voice'], 'voice_name': 'Elena', 'voice_text': 'Mensaje para libro sin email'},
+        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com', 'pages': 64, 'size': '8x8 hardcover',
+         'tags': ['qr_audio', 'voice'], 'voice_name': 'Mario', 'voice_seed': 'abc123',
+         'voice_text': 'Mensaje con voice_seed y qr_audio'},
+        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com', 'pages': 20, 'size': '5x8 paperback',
+         'tags': ['qr', 'voice'], 'voice_text': 'Nombre con caracteres raros'},
+        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com', 'pages': 12, 'size': '7x10 espiral',
+         'tags': []},
+        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com', 'pages': 32, 'size': '8x8 hardcover',
+         'tags': ['voice'], 'voice_text': 'Este es un texto de prueba largo para comprobar la duración del audio generado. Incluye varias frases y pausas para simular un párrafo completo.'},
+        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com', 'pages': 40, 'size': '5x8 paperback',
+         'tags': ['qr']},
+        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com', 'pages': 64, 'size': '7x10 espiral',
+         'tags': ['qr', 'voice'], 'voice_name': 'Luz', 'voice_text': 'Mensaje final'},
+    ]
+    for s in samples:
+        s.setdefault('voice_name', '')
+        s.setdefault('voice_seed', '')
+        s.setdefault('voice_text', '')
+        s['id'] = str(uuid.uuid4())
+        s['created'] = str(datetime.now().date())
+        s['status'] = 'pending'
+    ORDERS.extend(samples)
+    refresh_table()
+
+
+async def generate_selected() -> None:
+    rows = [r for r in ORDERS if r['id'] in selected_ids]
+    if not rows:
+        ui.notify('No hay pedidos seleccionados')
+        return
+    progress = ui.linear_progress(value=0.0)
+    DOWNLOADS.clear()
+    total = len(rows)
+    for i, row in enumerate(rows, 1):
+        try:
+            audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
+            synth_voice(row, audio_dir)
+            zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
+            row['status'] = 'ready'
+            DOWNLOADS.append({'order': row['order'], 'zip': zip_path})
+        except Exception as e:
+            row['status'] = 'error'
+            row['error'] = str(e)
+            logger.exception('generation failed for %s', row['order'])
+        progress.value = i / total
+        refresh_table()
+    progress.visible = False
+    render_downloads()
+    ui.notify('Generación completa')
+
+
+def render_downloads() -> None:
+    download_container.clear()
+    if not DOWNLOADS:
+        return
+    with download_container:
+        ui.label('Descargas').classes('text-lg')
+        for d in DOWNLOADS:
+            path = Path(d['zip']).name
+            with ui.row():
+                ui.label(f"Pedido {d['order']}")
+                ui.button('Descargar ZIP', on_click=lambda p=path: ui.open(f'/downloads/{p}'))
+
+
+@ui.page('/')
+def main_page() -> None:
+    global table, download_container
+    columns = [
+        {'name': 'id', 'label': 'ID', 'field': 'id', 'sortable': False},
+        {'name': 'order', 'label': 'Pedido', 'field': 'order'},
+        {'name': 'client', 'label': 'Cliente', 'field': 'client'},
+        {'name': 'email', 'label': 'Email', 'field': 'email'},
+        {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
+        {'name': 'size', 'label': 'Tamaño', 'field': 'size'},
+        {'name': 'status', 'label': 'Status', 'field': 'status'},
+    ]
+
+    def on_select(e: TableSelectionEventArguments) -> None:
+        selected_ids[:] = [r['id'] for r in e.selection]
+
+    with ui.header().classes('items-center justify-between'):
+        with ui.row():
+            ui.button('GENERAR SELECCIONADOS', on_click=generate_selected)
+            ui.button('EXPORTAR CSV', on_click=lambda: ui.open('/api/export.csv'))
+            ui.button('REFRESCAR', on_click=refresh_table)
+            ui.button('Cargar pedidos de prueba', on_click=load_sample_orders)
+
+    table = ui.table(columns=columns, rows=ORDERS, row_key='id', selection='multiple', on_select=on_select)
+
+    import_block()
+
+    download_container = ui.column()
+
+
+# ---------------------------------------------------------------------------
+# Run app
 
 if __name__ in {'__main__', '__mp_main__'}:
-    db_init()
-    ui.run(host=os.getenv('ECS_HOST', '0.0.0.0'), port=int(os.getenv('ECS_PORT', 8080)))
+    ui.run(host='0.0.0.0', port=8080)
+
