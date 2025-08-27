@@ -290,7 +290,7 @@ async def handle_upload(e: UploadEventArguments) -> None:
 def import_block() -> None:
     with ui.card().classes('p-4'):
         ui.label('Importar pedidos (CSV/Excel)')
-        ui.upload(on_upload=handle_upload, auto_upload=True, accept='.csv,.xlsx,.xls')
+        ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
 
 
 def load_sample_orders() -> None:
@@ -399,5 +399,5 @@ def main_page() -> None:
 # Run app
 
 if __name__ in {'__main__', '__mp_main__'}:
-    ui.run(host='0.0.0.0', port=8080)
+    ui.run(host='0.0.0.0', port=8080, reload=False)
 
