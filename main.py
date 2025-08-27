@@ -462,7 +462,6 @@ def generate_one(order_id: str, dialog: ui.dialog) -> None:
     dialog.close()
 
 @ui.page('/')
-
 def page_list_orders() -> None:
     global selected_orders
     selected_orders = []
@@ -477,22 +476,23 @@ def page_list_orders() -> None:
     def on_selection(e: dict) -> None:
         selected_orders[:] = e.get('selection', [])
 
-    def on_row_click(e: dict) -> None:
-        show_order_dialog(e['row']['id'])
+    def on_row_click(e: Any) -> None:
+        show_order_dialog(e.args[0]['row']['id'])
 
     with ui.row().classes('items-center'):
         ui.button('Generar seleccionados', on_click=lambda: generate_selected())
         ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
         ui.button('Refrescar', on_click=lambda: ui.open('/'))
-    ui.table(
+    table = ui.table(
         columns=columns,
         rows=rows,
         row_key='id',
         selection='multiple',
         on_select=on_selection,
-        on_row_click=on_row_click,
     )
+    table.on('rowClick', on_row_click)
     import_block()
+
 
 def generate_selected() -> None:
     if not selected_orders:
@@ -503,6 +503,7 @@ def generate_selected() -> None:
         ui.notify('Pedidos generados')
     except Exception as e:
         ui.notify(f'Error: {e}', type='negative')
+
 
 # descargas page
 
@@ -517,6 +518,11 @@ def page_downloads() -> None:
             ui.label(f'{f.stat().st_size} bytes')
             ui.button('Borrar', on_click=lambda f=f: (f.unlink(), ui.open('/descargas')))
 
+
+# ---------------------------------------------------------------------------
+# API
+
+
 @app.get('/api/orders')
 def api_orders(request: Request, status: str | None = None, q: str | None = None):
     rows = [dict(r) for r in db_list_orders()]
@@ -525,32 +531,19 @@ def api_orders(request: Request, status: str | None = None, q: str | None = None
     if q:
         rows = [r for r in rows if q.lower() in r['order_number'].lower()]
     return JSONResponse(rows)
-
-
-@app.post('/api/generate')
-async def api_generate(data: dict):
-    ids = data.get('ids', [])
-    path = generate_many(ids)
-    return {'zip_path': f'/static/downloads/{path.name}'}
-
-
-@app.get('/api/export.csv')
-def api_export_csv():
-    rows = db_list_orders()
-    def gen():
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(['order_number','client','email','cover','size','pages','language','tags','notes','status'])
-        for r in rows:
-            writer.writerow([r['order_number'], r['client'], r['email'], r['cover'], r['size'],
-                             r['pages'], r['language'], r['tags'], r['notes'], r['status']])
-        yield output.getvalue()
-    return StreamingResponse(gen(), media_type='text/csv', headers={'Content-Disposition':'attachment; filename="orders.csv"'})
-
-
-# ---------------------------------------------------------------------------
-# Run
-
+    with ui.row().classes('items-center'):
+        ui.button('Generar seleccionados', on_click=lambda: generate_selected())
+        ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
+        ui.button('Refrescar', on_click=lambda: ui.open('/'))
+    ui.table(
+        columns=columns,
+        rows=rows,
+        row_key='id',
+        selection='multiple',
+        on_select=on_selection,
+        on_row_click=on_row_click,
+    )
+    import_block()
 @app.post('/api/generate')
 async def api_generate(data: dict):
     ids = data.get('ids', [])
