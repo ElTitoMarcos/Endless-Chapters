@@ -1,0 +1,566 @@
+2025-08-28 00:30:45,144 ERROR Table.__init__() got an unexpected keyword argument 'on_row_click'
+  + Exception Group Traceback (most recent call last):
+  |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_utils.py", line 79, in collapse_excgroups
+  |     yield
+  |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 183, in __call__
+  |     async with anyio.create_task_group() as task_group:
+  |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 772, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |   File "C:\Users\marco\AppData\Local\Programs\Python\Python312\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    |     raise exc
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\middlewares.py", line 23, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    |     raise app_exc
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    |     with recv_stream, send_stream, collapse_excgroups():
+    |   File "C:\Users\marco\AppData\Local\Programs\Python\Python312\Lib\contextlib.py", line 158, in __exit__
+    |     self.gen.throw(value)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    |     raise exc
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\middlewares.py", line 13, in dispatch
+    |     response = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    |     raise app_exc
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 29, in __call__
+    |     await responder(scope, receive, send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 130, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 46, in __call__
+    |     await self.app(scope, receive, self.send_with_compression)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    |     await route.handle(scope, receive, send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    |     await self.app(scope, receive, send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 78, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 75, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\fastapi\routing.py", line 302, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\page.py", line 153, in decorated
+    |     return create_error_page(e, request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\page.py", line 116, in create_error_page
+    |     raise e
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\page.py", line 147, in decorated
+    |     result = func(*dec_args, **dec_kwargs)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in page_list_orders
+    |     ui.table(
+    | TypeError: Table.__init__() got an unexpected keyword argument 'on_row_click'
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "C:\Users\marco\AppData\Local\Programs\Python\Python312\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\middlewares.py", line 23, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    raise app_exc
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 182, in __call__
+    with recv_stream, send_stream, collapse_excgroups():
+  File "C:\Users\marco\AppData\Local\Programs\Python\Python312\Lib\contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_utils.py", line 85, in collapse_excgroups
+    raise exc
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 184, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\middlewares.py", line 13, in dispatch
+    response = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 159, in call_next
+    raise app_exc
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\base.py", line 144, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 29, in __call__
+    await responder(scope, receive, send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 130, in __call__
+    await super().__call__(scope, receive, send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\gzip.py", line 46, in __call__
+    await self.app(scope, receive, self.send_with_compression)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 78, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\starlette\routing.py", line 75, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\fastapi\routing.py", line 302, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\fastapi\routing.py", line 213, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\page.py", line 153, in decorated
+    return create_error_page(e, request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\page.py", line 116, in create_error_page
+    raise e
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\page.py", line 147, in decorated
+    result = func(*dec_args, **dec_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in page_list_orders
+    ui.table(
+TypeError: Table.__init__() got an unexpected keyword argument 'on_row_click'
+2025-08-28 00:34:46,182 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:34:46,668 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:34:48,550 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 484, in <lambda>
+    ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
+                                               ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:34:49,501 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 485, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:34:53,993 INFO 1 change detected
+2025-08-28 00:34:54,344 INFO 5 changes detected
+2025-08-28 00:34:54,696 INFO 4 changes detected
+2025-08-28 00:34:55,054 INFO 5 changes detected
+2025-08-28 00:35:00,675 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 485, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:35:02,332 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 485, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:35:09,451 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 485, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:35:10,525 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 485, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:35:12,023 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:35:12,643 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:35:13,566 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 484, in <lambda>
+    ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
+                                               ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:35:14,805 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 485, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:35:18,685 INFO 2 changes detected
+2025-08-28 00:35:19,040 INFO 5 changes detected
+2025-08-28 00:35:19,394 INFO 5 changes detected
+2025-08-28 00:35:19,748 INFO 5 changes detected
+2025-08-28 00:35:23,877 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 485, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:40:53,952 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 480, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:40:55,727 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 480, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:40:56,408 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:41:01,143 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:41:04,233 INFO 1 change detected
+2025-08-28 00:41:04,585 INFO 5 changes detected
+2025-08-28 00:41:04,943 INFO 4 changes detected
+2025-08-28 00:41:05,300 INFO 5 changes detected
+2025-08-28 00:41:09,221 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 480, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:41:10,327 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 480, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:41:11,016 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 480, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:41:11,853 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:41:15,733 ERROR 'TableSelectionEventArguments' object has no attribute 'get'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 477, in on_selection
+    selected_orders[:] = e.get('selection', [])
+                         ^^^^^
+AttributeError: 'TableSelectionEventArguments' object has no attribute 'get'
+2025-08-28 00:47:00,060 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:01,188 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:02,596 INFO 1 change detected
+2025-08-28 00:47:02,950 INFO 10 changes detected
+2025-08-28 00:47:03,306 INFO 5 changes detected
+2025-08-28 00:47:09,249 INFO 5 changes detected
+2025-08-28 00:47:11,137 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:12,077 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:15,066 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 486, in <lambda>
+    ui.button('Exportar CSV', on_click=lambda: ui.open('/api/export.csv'))
+                                               ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:18,079 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:18,424 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:18,616 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:18,807 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:19,583 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:24,014 INFO 2 changes detected
+2025-08-28 00:47:24,670 INFO 4 changes detected
+2025-08-28 00:47:26,888 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:28,392 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:30,314 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:31,888 ERROR module 'nicegui.ui' has no attribute 'open'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 433, in handle_event
+    result = cast(Callable[[], Any], handler)()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 487, in <lambda>
+    ui.button('Refrescar', on_click=lambda: ui.open('/'))
+                                            ^^^^^^^
+AttributeError: module 'nicegui.ui' has no attribute 'open'
+2025-08-28 00:47:33,584 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:33,934 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:34,095 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:34,263 ERROR 'row'
+Traceback (most recent call last):
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\.venv\Lib\site-packages\nicegui\events.py", line 431, in handle_event
+    result = cast(Callable[[EventT], Any], handler)(arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Escritorio\Ecom\Endless Chapters\endless-chapters-studio-fixed\main.py", line 482, in on_row_click
+    show_order_dialog(e.args[0]['row']['id'])
+                      ~~~~~~~~~^^^^^^^
+KeyError: 'row'
+2025-08-28 00:47:37,229 INFO 1 change detected
+2025-08-28 00:47:37,842 INFO 1 change detected
+2025-08-28 00:47:38,207 INFO 1 change detected
+2025-08-28 00:47:39,466 INFO 8 changes detected
+2025-08-28 00:47:39,825 INFO 5 changes detected
+2025-08-28 00:47:40,230 INFO 12 changes detected
+2025-08-28 00:47:40,582 INFO 5 changes detected
+2025-08-28 00:47:40,935 INFO 2 changes detected
+2025-08-28 00:47:41,289 INFO 2 changes detected
+2025-08-28 00:47:41,645 INFO 8 changes detected
+2025-08-28 00:47:41,999 INFO 9 changes detected
+2025-08-28 00:47:42,354 INFO 5 changes detected
+2025-08-28 00:47:48,105 INFO 1 change detected
+2025-08-28 00:51:33,866 INFO 9 changes detected
+2025-08-28 00:51:34,225 INFO 1 change detected
+2025-08-28 00:51:39,361 INFO 20 changes detected
