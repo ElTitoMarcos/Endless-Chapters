@@ -366,6 +366,9 @@ def load_sample_orders() -> None:
         s.setdefault('voice_name', '')
         s.setdefault('voice_seed', '')
         s.setdefault('voice_text', '')
+        s.setdefault('personalized_characters', 0)
+        s.setdefault('narration', 'None')
+        s.setdefault('revisions', 0)
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
         s['status'] = 'Pending to prompt'
@@ -481,7 +484,6 @@ def main_page() -> None:
     table.on('generate_prompt', lambda e: ui.run_async(generate_prompt(_row_from_event(e))))
     table.on('open_storybook', lambda e: ui.run_async(open_storybook(_row_from_event(e))))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
-
     import_block()
     download_container = ui.column()
 
