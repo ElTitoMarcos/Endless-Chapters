@@ -270,11 +270,13 @@ def api_export_csv() -> StreamingResponse:
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(['id', 'created', 'order', 'client', 'email', 'cover', 'size', 'pages',
+                         'personalized_characters', 'narration', 'revisions',
                          'status', 'tags', 'voice_name', 'voice_seed', 'voice_text'])
         for r in ORDERS:
             writer.writerow([
                 r['id'], r['created'], r['order'], r['client'], r['email'], r['cover'],
-                r['size'], r['pages'], r['status'], ','.join(r['tags']),
+                r['size'], r['pages'], r['personalized_characters'], r['narration'],
+                r['revisions'], r['status'], ','.join(r['tags']),
                 r['voice_name'], r['voice_seed'], r['voice_text'],
             ])
         yield output.getvalue()
@@ -317,26 +319,46 @@ def import_block() -> None:
 def load_sample_orders() -> None:
     samples = [
         {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com', 'pages': 12, 'size': '7x10 espiral',
+         'cover': 'Premium Hardcover', 'personalized_characters': 0,
+         'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr', 'voice', 'qr_audio'], 'voice_name': 'Luz',
          'voice_text': 'Hola, este es tu audiolibro...'},
         {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com', 'pages': 20, 'size': '8x8 hardcover',
+         'cover': 'Standard Hardcover', 'personalized_characters': 1,
+         'narration': 'None', 'revisions': 1,
          'tags': ['voice'], 'voice_name': 'Carlos', 'voice_text': 'Este es un mensaje sin QR.'},
         {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com', 'pages': 32, 'size': '5x8 paperback',
+         'cover': 'Premium Hardcover', 'personalized_characters': 2,
+         'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': ['qr']},
         {'order': '1004', 'client': 'Diego', 'email': '', 'pages': 40, 'size': '7x10 espiral',
+         'cover': 'Standard Hardcover', 'personalized_characters': 3,
+         'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_name': 'Elena', 'voice_text': 'Mensaje para libro sin email'},
         {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com', 'pages': 64, 'size': '8x8 hardcover',
+         'cover': 'Premium Hardcover', 'personalized_characters': 0,
+         'narration': 'Narrated by your loved one', 'revisions': 1,
          'tags': ['qr_audio', 'voice'], 'voice_name': 'Mario', 'voice_seed': 'abc123',
          'voice_text': 'Mensaje con voice_seed y qr_audio'},
         {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com', 'pages': 20, 'size': '5x8 paperback',
+         'cover': 'Standard Hardcover', 'personalized_characters': 2,
+         'narration': 'None', 'revisions': 0,
          'tags': ['qr', 'voice'], 'voice_text': 'Nombre con caracteres raros'},
         {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com', 'pages': 12, 'size': '7x10 espiral',
+         'cover': 'Premium Hardcover', 'personalized_characters': 1,
+         'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': []},
         {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com', 'pages': 32, 'size': '8x8 hardcover',
+         'cover': 'Standard Hardcover', 'personalized_characters': 0,
+         'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_text': 'Este es un texto de prueba largo para comprobar la duración del audio generado. Incluye varias frases y pausas para simular un párrafo completo.'},
         {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com', 'pages': 40, 'size': '5x8 paperback',
+         'cover': 'Premium Hardcover', 'personalized_characters': 3,
+         'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr']},
         {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com', 'pages': 64, 'size': '7x10 espiral',
+         'cover': 'Standard Hardcover', 'personalized_characters': 1,
+         'narration': 'None', 'revisions': 1,
          'tags': ['qr', 'voice'], 'voice_name': 'Luz', 'voice_text': 'Mensaje final'},
     ]
     for s in samples:
@@ -404,8 +426,12 @@ def main_page() -> None:
         {'name': 'order', 'label': 'Pedido', 'field': 'order'},
         {'name': 'client', 'label': 'Cliente', 'field': 'client'},
         {'name': 'email', 'label': 'Email', 'field': 'email'},
+        {'name': 'cover', 'label': 'Cubierta', 'field': 'cover'},
         {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
         {'name': 'size', 'label': 'Tamaño', 'field': 'size'},
+        {'name': 'personalized_characters', 'label': 'Personajes', 'field': 'personalized_characters'},
+        {'name': 'narration', 'label': 'Narración', 'field': 'narration'},
+        {'name': 'revisions', 'label': 'Revisiones', 'field': 'revisions'},
         {'name': 'status', 'label': 'Status', 'field': 'status'},
     ]
 
