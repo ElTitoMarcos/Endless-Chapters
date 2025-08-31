@@ -14,12 +14,13 @@ from typing import Any, Iterable
 
 import pandas as pd
 import qrcode
+import requests
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import LETTER
 from dotenv import load_dotenv
 
 from nicegui import ui, app
-from nicegui.events import UploadEventArguments, TableSelectionEventArguments
+from nicegui.events import UploadEventArguments
 from fastapi.responses import JSONResponse, StreamingResponse
 
 # ---------------------------------------------------------------------------
@@ -56,15 +57,16 @@ def make_qr(url: str, out_png: Path) -> None:
     img.save(out_png)
 
 
-def simple_pdf(text: str, out_pdf: Path, qr_png: Path | None = None) -> None:
+def simple_pdf(texts: list[str], out_pdf: Path, qr_png: Path | None = None) -> None:
     ensure_dir(out_pdf.parent)
     c = canvas.Canvas(str(out_pdf), pagesize=LETTER)
-    c.setFont('Helvetica', 14)
-    c.drawString(72, 720, text)
-    if qr_png and qr_png.exists():
-        c.drawImage(str(qr_png), 450, 50, width=120, height=120,
-                    preserveAspectRatio=True, mask='auto')
-    c.showPage()
+    for i, text in enumerate(texts):
+        c.setFont('Helvetica', 14)
+        c.drawString(72, 720, text)
+        if i == 0 and qr_png and qr_png.exists():
+            c.drawImage(str(qr_png), 450, 50, width=120, height=120,
+                        preserveAspectRatio=True, mask='auto')
+        c.showPage()
     c.save()
 
 def zip_dir(src: Path, zip_path: Path) -> None:
@@ -97,7 +99,6 @@ COL_ALIASES = {
     'client': ['client', 'cliente', 'name'],
     'email': ['email', 'correo'],
     'cover': ['cover'],
-    'size': ['size', 'tamaño'],
     'pages': ['pages', 'paginas'],
     'tags': ['tags'],
     'personalized_characters': ['personalized_characters', 'characters'],
@@ -135,9 +136,8 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'client': str(_val(data, COL_ALIASES['client']) or ''),
             'email': str(_val(data, COL_ALIASES['email']) or ''),
             'cover': str(_val(data, COL_ALIASES['cover']) or ''),
-            'size': str(_val(data, COL_ALIASES['size']) or ''),
             'pages': int(_val(data, COL_ALIASES['pages']) or 0),
-            'status': 'pending',
+            'status': 'Pending to prompt',
             'tags': [t.strip() for t in str(_val(data, COL_ALIASES['tags']) or '').split(',') if t.strip()],
             'personalized_characters': int(_val(data, COL_ALIASES['personalized_characters']) or 0),
             'narration': str(_val(data, COL_ALIASES['narration']) or ''),
@@ -231,15 +231,17 @@ def generate_order_bundle(row: dict, base_out: Path) -> tuple[Path, Path]:
         qr_png = qr_dir / 'qr.png'
         make_qr(qr_url, qr_png)
 
-    cover_pdf = docs_dir / 'cover.pdf'
-    interior_pdf = docs_dir / 'interior.pdf'
-    simple_pdf(f"Cover {row['order']} - {row['client']}", cover_pdf, qr_png)
-    simple_pdf(f"Interior {row['order']} - {row['client']}", interior_pdf)
+    book_pdf = docs_dir / 'book.pdf'
+    texts = [
+        f"Cover {row['order']} - {row['client']}",
+        f"Interior {row['order']} - {row['client']}",
+    ]
+    simple_pdf(texts, book_pdf, qr_png)
 
     manifest = dict(row)
     manifest.update({
         'generated_at': datetime.now().isoformat(),
-        'docs': {'cover': 'docs/cover.pdf', 'interior': 'docs/interior.pdf'},
+        'docs': {'book': 'docs/book.pdf'},
         'qr': 'qr/qr.png' if qr_png else None,
         'audio': str(audio_rel) if audio_rel else None,
     })
@@ -269,13 +271,13 @@ def api_export_csv() -> StreamingResponse:
     def gen():
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(['id', 'created', 'order', 'client', 'email', 'cover', 'size', 'pages',
+        writer.writerow(['id', 'created', 'order', 'client', 'email', 'cover', 'pages',
                          'personalized_characters', 'narration', 'revisions',
                          'status', 'tags', 'voice_name', 'voice_seed', 'voice_text'])
         for r in ORDERS:
             writer.writerow([
                 r['id'], r['created'], r['order'], r['client'], r['email'], r['cover'],
-                r['size'], r['pages'], r['personalized_characters'], r['narration'],
+                r['pages'], r['personalized_characters'], r['narration'],
                 r['revisions'], r['status'], ','.join(r['tags']),
                 r['voice_name'], r['voice_seed'], r['voice_text'],
             ])
@@ -287,9 +289,8 @@ def api_export_csv() -> StreamingResponse:
 # ---------------------------------------------------------------------------
 # UI
 
-selected_ids: list[str] = []
-table: ui.table
-download_container: ui.column
+    table: ui.table
+    download_container: ui.column
 
 
 def refresh_table() -> None:
@@ -318,45 +319,45 @@ def import_block() -> None:
 
 def load_sample_orders() -> None:
     samples = [
-        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com', 'pages': 12, 'size': '7x10 espiral',
+        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com', 'pages': 12,
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
          'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr', 'voice', 'qr_audio'], 'voice_name': 'Luz',
          'voice_text': 'Hola, este es tu audiolibro...'},
-        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com', 'pages': 20, 'size': '8x8 hardcover',
+        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com', 'pages': 20,
          'cover': 'Standard Hardcover', 'personalized_characters': 1,
          'narration': 'None', 'revisions': 1,
          'tags': ['voice'], 'voice_name': 'Carlos', 'voice_text': 'Este es un mensaje sin QR.'},
-        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com', 'pages': 32, 'size': '5x8 paperback',
+        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com', 'pages': 32,
          'cover': 'Premium Hardcover', 'personalized_characters': 2,
          'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': ['qr']},
-        {'order': '1004', 'client': 'Diego', 'email': '', 'pages': 40, 'size': '7x10 espiral',
+        {'order': '1004', 'client': 'Diego', 'email': '', 'pages': 40,
          'cover': 'Standard Hardcover', 'personalized_characters': 3,
          'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_name': 'Elena', 'voice_text': 'Mensaje para libro sin email'},
-        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com', 'pages': 64, 'size': '8x8 hardcover',
+        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com', 'pages': 64,
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
          'narration': 'Narrated by your loved one', 'revisions': 1,
          'tags': ['qr_audio', 'voice'], 'voice_name': 'Mario', 'voice_seed': 'abc123',
          'voice_text': 'Mensaje con voice_seed y qr_audio'},
-        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com', 'pages': 20, 'size': '5x8 paperback',
+        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com', 'pages': 20,
          'cover': 'Standard Hardcover', 'personalized_characters': 2,
          'narration': 'None', 'revisions': 0,
          'tags': ['qr', 'voice'], 'voice_text': 'Nombre con caracteres raros'},
-        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com', 'pages': 12, 'size': '7x10 espiral',
+        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com', 'pages': 12,
          'cover': 'Premium Hardcover', 'personalized_characters': 1,
          'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': []},
-        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com', 'pages': 32, 'size': '8x8 hardcover',
+        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com', 'pages': 32,
          'cover': 'Standard Hardcover', 'personalized_characters': 0,
          'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_text': 'Este es un texto de prueba largo para comprobar la duración del audio generado. Incluye varias frases y pausas para simular un párrafo completo.'},
-        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com', 'pages': 40, 'size': '5x8 paperback',
+        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com', 'pages': 40,
          'cover': 'Premium Hardcover', 'personalized_characters': 3,
          'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr']},
-        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com', 'pages': 64, 'size': '7x10 espiral',
+        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com', 'pages': 64,
          'cover': 'Standard Hardcover', 'personalized_characters': 1,
          'narration': 'None', 'revisions': 1,
          'tags': ['qr', 'voice'], 'voice_name': 'Luz', 'voice_text': 'Mensaje final'},
@@ -370,35 +371,9 @@ def load_sample_orders() -> None:
         s.setdefault('revisions', 0)
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
-        s['status'] = 'pending'
+        s['status'] = 'Pending to prompt'
     ORDERS.extend(samples)
     refresh_table()
-
-
-async def generate_selected() -> None:
-    rows = [r for r in ORDERS if r['id'] in selected_ids]
-    if not rows:
-        ui.notify('No hay pedidos seleccionados')
-        return
-    progress = ui.linear_progress(value=0.0)
-    DOWNLOADS.clear()
-    total = len(rows)
-    for i, row in enumerate(rows, 1):
-        try:
-            audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
-            audio_path = synth_voice(row, audio_dir)
-            work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
-            row['status'] = 'ready'
-            DOWNLOADS.append({'order': row['order'], 'zip': zip_path, 'dir': work_dir, 'audio': audio_path})
-        except Exception as e:
-            row['status'] = 'error'
-            row['error'] = str(e)
-            logger.exception('generation failed for %s', row['order'])
-        progress.value = i / total
-        refresh_table()
-    progress.visible = False
-    render_downloads()
-    ui.notify('Generación completa')
 
 
 def render_downloads() -> None:
@@ -414,10 +389,52 @@ def render_downloads() -> None:
                 ui.label(f"Pedido {d['order']}")
                 ui.button('Descargar ZIP', on_click=lambda p=path: ui.download(f'/downloads/{p}'))
                 if folder:
-                    ui.link('Ver cover', f'/downloads/{folder}/docs/cover.pdf', new_tab=True)
-                    ui.link('Ver interior', f'/downloads/{folder}/docs/interior.pdf', new_tab=True)
+                    ui.link('Ver libro', f'/downloads/{folder}/docs/book.pdf', new_tab=True)
                     if d.get('audio'):
-                        ui.link('Escuchar audio', f'/downloads/{folder}/audio/voice.mp3', new_tab=True)
+                        ui.audio(f'/downloads/{folder}/audio/voice.mp3').props('controls')
+
+
+async def generate_prompt(row: dict) -> None:
+    try:
+        if OPENAI_API_KEY:
+            payload = {
+                'model': 'gpt-4o-mini',
+                'messages': [{'role': 'user', 'content': f"Genera un prompt breve para un cuento de {row['pages']} páginas para {row['client']}."}],
+            }
+            headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
+            r = requests.post('https://api.openai.com/v1/chat/completions', headers=headers, json=payload)
+            r.raise_for_status()
+            data = r.json()
+            row['prompt'] = data['choices'][0]['message']['content']
+        else:
+            row['prompt'] = f"Historia para {row['client']} de {row['pages']} páginas."
+        row['status'] = 'Pending to upload file'
+        refresh_table()
+        ui.notify('Prompt generado')
+    except Exception as e:
+        ui.notify(f'Error generando prompt: {e}', type='negative')
+
+
+async def open_storybook(row: dict) -> None:
+    try:
+        ui.open('https://gemini.google.com/gem/storybook')
+        if row.get('prompt'):
+            await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(row['prompt'])});")
+        audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
+        audio_path = synth_voice(row, audio_dir)
+        work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
+        row['status'] = 'Pending yo revise PDF'
+        DOWNLOADS.append({'order': row['order'], 'zip': zip_path, 'dir': work_dir, 'audio': audio_path})
+        refresh_table()
+        render_downloads()
+        ui.notify('Libro generado, revisa el PDF')
+    except Exception as e:
+        ui.notify(f'Error preparando libro: {e}', type='negative')
+
+
+def mark_done(row: dict) -> None:
+    row['status'] = 'DONE'
+    refresh_table()
 @ui.page('/')
 def main_page() -> None:
     global table, download_container
@@ -428,24 +445,30 @@ def main_page() -> None:
         {'name': 'email', 'label': 'Email', 'field': 'email'},
         {'name': 'cover', 'label': 'Cubierta', 'field': 'cover'},
         {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
-        {'name': 'size', 'label': 'Tamaño', 'field': 'size'},
         {'name': 'personalized_characters', 'label': 'Personajes', 'field': 'personalized_characters'},
         {'name': 'narration', 'label': 'Narración', 'field': 'narration'},
         {'name': 'revisions', 'label': 'Revisiones', 'field': 'revisions'},
         {'name': 'status', 'label': 'Status', 'field': 'status'},
     ]
 
-    def on_select(e: TableSelectionEventArguments) -> None:
-        selected_ids[:] = [r['id'] for r in e.selection]
-
     with ui.header().classes('items-center justify-between'):
         with ui.row():
-            ui.button('GENERAR SELECCIONADOS', on_click=generate_selected)
             ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
             ui.button('Cargar pedidos de prueba', on_click=load_sample_orders)
 
-    table = ui.table(columns=columns, rows=ORDERS, row_key='id', selection='multiple', on_select=on_select)
+    table = ui.table(columns=columns, rows=ORDERS, row_key='id')
+
+    @table.add_slot('body-cell-status')
+    def _(row: dict) -> None:
+        with ui.row():
+            ui.label(row['status'])
+            if row['status'] == 'Pending to prompt':
+                ui.button('Generar prompt', on_click=lambda r=row: ui.run_async(generate_prompt(r)))
+            elif row['status'] == 'Pending to upload file':
+                ui.button('Abrir Storybook', on_click=lambda r=row: ui.run_async(open_storybook(r)))
+            elif row['status'] == 'Pending yo revise PDF':
+                ui.button('Marcar DONE', on_click=lambda r=row: mark_done(r))
 
     import_block()
     download_container = ui.column()
