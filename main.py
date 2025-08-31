@@ -158,10 +158,18 @@ def synth_voice(row: dict, out_dir: Path) -> Path | None:
     provider = VOICE_PROVIDER
     try:
         if row.get('voice_sample'):
-            from TTS.api import TTS
-            tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
-            tts.tts_to_file(text=text, speaker_wav=row['voice_sample'], language="es", file_path=str(out_path))
-            return out_path
+            try:
+                from TTS.api import TTS  # type: ignore
+                tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
+                tts.tts_to_file(
+                    text=text,
+                    speaker_wav=row['voice_sample'],
+                    language="es",
+                    file_path=str(out_path),
+                )
+                return out_path
+            except Exception as e:
+                logger.warning('TTS voice clone unavailable: %s', e)
         if provider == 'elevenlabs' and XI_API_KEY:
             import requests
             voice_id = row.get('voice_seed') or '21m00Tcm4TlvDq8ikWAM'
