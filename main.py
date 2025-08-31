@@ -76,12 +76,15 @@ def zip_dir(src: Path, zip_path: Path) -> None:
             if p.is_file():
                 z.write(p, p.relative_to(src))
 
-def zip_dir(src: Path, zip_path: Path) -> None:
-    ensure_dir(zip_path.parent)
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
-        for p in src.rglob('*'):
-            if p.is_file():
-                z.write(p, p.relative_to(src))
+
+def verify_openai_key(key: str) -> bool:
+    try:
+        r = requests.get('https://api.openai.com/v1/models',
+                         headers={'Authorization': f'Bearer {key}'}, timeout=10)
+        return r.status_code == 200
+    except Exception as e:
+        logger.error('verify key failed: %s', e)
+        return False
 
 # ---------------------------------------------------------------------------
 # Data model in memory
@@ -139,11 +142,34 @@ def generate_prompts(row: dict) -> None:
     narration = row.get('narration')
     if narration and narration.lower() != 'none':
         specs.append(f"narración: {narration}")
-    base = '. '.join(specs) + '.'
+    base = '. '.join(specs) + '. No menciones número de páginas ni tipo de cubierta.'
     prompts: list[str] = []
     for i in range(books_for_cover(row.get('cover', ''))):
         extra = " Continúa la historia del libro anterior." if i else ""
-        prompts.append(base + extra)
+        prompt_input = base + extra
+        if OPENAI_API_KEY:
+            try:
+                payload = {
+                    'model': 'gpt-4o',
+                    'messages': [
+                        {'role': 'system', 'content': 'Eres un asistente que genera prompts para Gemini Storybook.'},
+                        {'role': 'user', 'content': prompt_input},
+                    ],
+                }
+                r = requests.post('https://api.openai.com/v1/chat/completions',
+                                   headers={'Authorization': f'Bearer {OPENAI_API_KEY}'},
+                                   json=payload, timeout=20)
+                if r.status_code == 200:
+                    content = r.json()['choices'][0]['message']['content'].strip()
+                    prompts.append(content)
+                else:
+                    logger.warning('OpenAI prompt error %s: %s', r.status_code, r.text)
+                    prompts.append(prompt_input)
+            except Exception as e:
+                logger.error('OpenAI prompt failed: %s', e)
+                prompts.append(prompt_input)
+        else:
+            prompts.append(prompt_input)
     row['prompts'] = prompts
     row['status'] = 'Prompt ready'
 
@@ -347,6 +373,30 @@ def import_block() -> None:
         ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
 
 
+def api_key_block() -> None:
+    with ui.card().classes('p-4'):
+        ui.label('Configurar OpenAI')
+        key_input = ui.input('API key', password=True, value=OPENAI_API_KEY or '').props('clearable')
+        status = ui.label('')
+
+        def verify() -> None:
+            global OPENAI_API_KEY
+            key = key_input.value.strip()
+            if not key:
+                ui.notify('Introduce una clave', type='warning')
+                return
+            if verify_openai_key(key):
+                OPENAI_API_KEY = key
+                os.environ['OPENAI_API_KEY'] = key
+                status.text = 'Clave verificada'
+                ui.notify('Clave verificada')
+            else:
+                status.text = 'Clave inválida'
+                ui.notify('Clave inválida', type='negative')
+
+        ui.button('Verificar', on_click=verify)
+
+
 def load_sample_orders() -> None:
     samples = [
         {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
@@ -465,6 +515,8 @@ def main_page() -> None:
             ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
             ui.button('Cargar pedidos de prueba', on_click=load_sample_orders)
+
+    api_key_block()
 
     table = ui.table(columns=columns, rows=ORDERS, row_key='id')
 

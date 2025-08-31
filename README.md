@@ -3,7 +3,8 @@
 
 App local con interfaz para:
 - Importar pedidos desde Excel/CSV
-- Generar prompts por pedido automáticamente
+- Configurar y verificar la clave de OpenAI
+- Generar prompts por pedido automáticamente usando GPT-4o
 - Subir texto (JSON o TXT) y audio (opcional)
 - Producir PDF listo para imprenta (portada color con logo, interior en grises, QR a audio)
 - Clonar voz a partir de un archivo de audio y generar locuciones del texto
@@ -23,6 +24,10 @@ python main.py
 Abrirá el navegador en http://127.0.0.1:8080
 
 > Nota: la clonación de voz con muestras requiere la librería opcional `TTS`, disponible solo para versiones de Python anteriores a 3.12. Si no está instalada, la aplicación usará `pyttsx3` con una voz genérica.
+
+### Clave de API de OpenAI
+
+En la interfaz hay un bloque para introducir y verificar tu clave de OpenAI. Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI.
 
 ## Columnas reconocidas en Excel/CSV
 - order, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), personalized_characters, narration, revisions, voice_sample
