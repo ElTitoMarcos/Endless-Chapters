@@ -1,7 +1,7 @@
-order_id,title,email,tags,notes,cover,wants_voice,pages,personalized_characters,narration,revisions
-1001,El viaje de Luna,luna@example.com,voz,Niña y su gato exploran un bosque mágico,Premium Hardcover,true,24,0,Narrated by your loved one,0
-1002,El faro de Mateo,mateo@example.com,qr,Niño ayuda a encender el faro antes de la tormenta,Standard Hardcover,false,20,1,None,1
-1003,La magia de Sofía,sofia@example.com,"voz,qr",Niña encuentra un libro encantado que cobra vida,Premium Hardcover,true,32,2,Narrated by your loved one,2
-1004,Aventura de Diego,diego@example.com,,Niño construye una nave espacial de cartón,Standard Hardcover,false,28,3,None,3
-1005,Misterio de Valentina,valentina@example.com,qr,Valentina resuelve enigmas en un museo,Premium Hardcover,false,30,0,Narrated by your loved one,1
-1006,Viaje de Carla,carla@example.com,voz,Carla viaja al fondo del mar con un delfín,Standard Hardcover,true,40,2,None,0
+order_id,title,email,tags,notes,cover,wants_voice,personalized_characters,narration,revisions
+1001,El viaje de Luna,luna@example.com,voz,Niña y su gato exploran un bosque mágico,Premium Hardcover,true,0,Narrated by your loved one,0
+1002,El faro de Mateo,mateo@example.com,qr,Niño ayuda a encender el faro antes de la tormenta,Standard Hardcover,false,1,None,1
+1003,La magia de Sofía,sofia@example.com,"voz,qr",Niña encuentra un libro encantado que cobra vida,Premium Hardcover,true,2,Narrated by your loved one,2
+1004,Aventura de Diego,diego@example.com,,Niño construye una nave espacial de cartón,Standard Hardcover,false,3,None,3
+1005,Misterio de Valentina,valentina@example.com,qr,Valentina resuelve enigmas en un museo,Premium Hardcover,false,0,Narrated by your loved one,1
+1006,Viaje de Carla,carla@example.com,voz,Carla viaja al fondo del mar con un delfín,Standard Hardcover,true,2,None,0

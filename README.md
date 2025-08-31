@@ -3,7 +3,7 @@
 
 App local con interfaz para:
 - Importar pedidos desde Excel/CSV
-- Generar prompts (3 variantes) por pedido
+- Generar prompts por pedido automáticamente
 - Subir texto (JSON o TXT) y audio (opcional)
 - Producir PDF listo para imprenta (portada color con logo, interior en grises, QR a audio)
 - Clonar voz a partir de un archivo de audio y generar locuciones del texto
@@ -25,7 +25,7 @@ Abrirá el navegador en http://127.0.0.1:8080
 > Nota: la clonación de voz con muestras requiere la librería opcional `TTS`, disponible solo para versiones de Python anteriores a 3.12. Si no está instalada, la aplicación usará `pyttsx3` con una voz genérica.
 
 ## Columnas reconocidas en Excel/CSV
-- order_id, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), wants_voice, pages, personalized_characters, narration, revisions, voice_sample
+- order, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), personalized_characters, narration, revisions, voice_sample
 (No todas son obligatorias; la app usa valores por defecto si faltan)
 
 ### Opciones de personalización
@@ -39,7 +39,7 @@ Abrirá el navegador en http://127.0.0.1:8080
 Ejecuta `python generate_sample_orders.py` para crear `sample_orders.csv` con ejemplos que cubren combinaciones de etiquetas `voz` y `qr` y distintos tipos de cubierta. Importa este archivo desde la interfaz para verificar que todo funcione correctamente.
 
 ### Flujo de estados
-Cada pedido avanza por los siguientes estados: "Pending to prompt" → "Pending to upload file" → "Pending yo revise PDF" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
+Cada pedido avanza por los siguientes estados: "Prompt ready" → "Pending yo revise PDF" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
 
 ## Empaquetar en .EXE (Windows)
 ```powershell
