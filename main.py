@@ -100,6 +100,9 @@ COL_ALIASES = {
     'size': ['size', 'tamaño'],
     'pages': ['pages', 'paginas'],
     'tags': ['tags'],
+    'personalized_characters': ['personalized_characters', 'characters'],
+    'narration': ['narration'],
+    'revisions': ['revisions', 'revision'],
     'voice_name': ['voice_name', 'voice'],
     'voice_seed': ['voice_seed', 'voice_id'],
     'voice_text': ['voice_text', 'text'],
@@ -136,6 +139,9 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'pages': int(_val(data, COL_ALIASES['pages']) or 0),
             'status': 'pending',
             'tags': [t.strip() for t in str(_val(data, COL_ALIASES['tags']) or '').split(',') if t.strip()],
+            'personalized_characters': int(_val(data, COL_ALIASES['personalized_characters']) or 0),
+            'narration': str(_val(data, COL_ALIASES['narration']) or ''),
+            'revisions': int(_val(data, COL_ALIASES['revisions']) or 0),
             'voice_name': str(_val(data, COL_ALIASES['voice_name']) or ''),
             'voice_seed': str(_val(data, COL_ALIASES['voice_seed']) or ''),
             'voice_text': str(_val(data, COL_ALIASES['voice_text']) or ''),
@@ -337,6 +343,9 @@ def load_sample_orders() -> None:
         s.setdefault('voice_name', '')
         s.setdefault('voice_seed', '')
         s.setdefault('voice_text', '')
+        s.setdefault('personalized_characters', 0)
+        s.setdefault('narration', 'None')
+        s.setdefault('revisions', 0)
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
         s['status'] = 'pending'

@@ -25,8 +25,14 @@ Abrirá el navegador en http://127.0.0.1:8080
 > Nota: la clonación de voz con muestras requiere la librería opcional `TTS`, disponible solo para versiones de Python anteriores a 3.12. Si no está instalada, la aplicación usará `pyttsx3` con una voz genérica.
 
 ## Columnas reconocidas en Excel/CSV
-- order_id, title, email, tags, notes, cover (hardcover/paperback), size, wants_voice, pages, voice_sample
+- order_id, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), size, wants_voice, pages, personalized_characters, narration, revisions, voice_sample
 (No todas son obligatorias; la app usa valores por defecto si faltan)
+
+### Opciones de personalización
+- **Cubierta:** Premium Hardcover, Standard Hardcover
+- **Personajes personalizados:** 0-3
+- **Narración:** Narrated by your loved one, None
+- **Revisiones:** 0-3
 
 ### Órdenes de prueba
 
