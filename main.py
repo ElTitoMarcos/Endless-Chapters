@@ -459,17 +459,31 @@ def main_page() -> None:
 
     table = ui.table(columns=columns, rows=ORDERS, row_key='id')
 
-    @table.add_slot('body-cell-status')
-    def _(row: dict) -> None:
-        with ui.row():
-            ui.label(row['status'])
-            if row['status'] == 'Pending to prompt':
-                ui.button('Generar prompt', on_click=lambda r=row: ui.run_async(generate_prompt(r)))
-            elif row['status'] == 'Pending to upload file':
-                ui.button('Abrir Storybook', on_click=lambda r=row: ui.run_async(open_storybook(r)))
-            elif row['status'] == 'Pending yo revise PDF':
-                ui.button('Marcar DONE', on_click=lambda r=row: mark_done(r))
+    status_slot = """
+    <q-td :props="props">
+      <div class='row items-center q-gutter-sm'>
+        <span>{{ props.row.status }}</span>
+        <q-btn v-if="props.row.status === 'Pending to prompt'"
+               label="Generar prompt"
+               @click="() => emit('generate_prompt', props.row.id)"/>
+        <q-btn v-else-if="props.row.status === 'Pending to upload file'"
+               label="Abrir Storybook"
+               @click="() => emit('open_storybook', props.row.id)"/>
+        <q-btn v-else-if="props.row.status === 'Pending yo revise PDF'"
+               label="Marcar DONE"
+               @click="() => emit('mark_done', props.row.id)"/>
+      </div>
+    </q-td>
+    """
+    table.add_slot('body-cell-status', status_slot)
 
+    def _row_from_event(e):
+        rid = e.args if isinstance(e.args, str) else e.args[0]
+        return next(r for r in ORDERS if r['id'] == rid)
+
+    table.on('generate_prompt', lambda e: ui.run_async(generate_prompt(_row_from_event(e))))
+    table.on('open_storybook', lambda e: ui.run_async(open_storybook(_row_from_event(e))))
+    table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()
     download_container = ui.column()
 
