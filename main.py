@@ -63,7 +63,7 @@ def simple_pdf(texts: list[str], out_pdf: Path, qr_png: Path | None = None) -> N
     for i, text in enumerate(texts):
         c.setFont('Helvetica', 14)
         c.drawString(72, 720, text)
-        if i == 0 and qr_png and qr_png.exists():
+        if i == len(texts) - 1 and qr_png and qr_png.exists():
             c.drawImage(str(qr_png), 450, 50, width=120, height=120,
                         preserveAspectRatio=True, mask='auto')
         c.showPage()
@@ -130,6 +130,23 @@ def books_for_cover(cover: str) -> int:
     return 2 if cover.lower() == 'premium hardcover' else 1
 
 
+def generate_prompts(row: dict) -> None:
+    """Build Gemini Storybook prompts based on order specs."""
+    specs = [f"Crea un cuento para {row['client']}"]
+    pcs = row.get('personalized_characters')
+    if pcs:
+        specs.append(f"incluye {pcs} personajes personalizados")
+    narration = row.get('narration')
+    if narration and narration.lower() != 'none':
+        specs.append(f"narración: {narration}")
+    base = '. '.join(specs) + '.'
+    prompts: list[str] = []
+    for i in range(books_for_cover(row.get('cover', ''))):
+        extra = " Continúa la historia del libro anterior." if i else ""
+        prompts.append(base + extra)
+    row['prompts'] = prompts
+    row['status'] = 'Prompt ready'
+
 def parse_orders(temp_path: Path) -> list[dict]:
     if temp_path.suffix.lower() in {'.xlsx', '.xls'}:
         df = pd.read_excel(temp_path)
@@ -148,7 +165,6 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'client': str(_val(data, COL_ALIASES['client']) or ''),
             'email': str(_val(data, COL_ALIASES['email']) or ''),
             'cover': str(_val(data, COL_ALIASES['cover']) or ''),
-            'status': 'Pending to prompt',
             'tags': [t.strip() for t in str(_val(data, COL_ALIASES['tags']) or '').split(',') if t.strip()],
             'personalized_characters': int(_val(data, COL_ALIASES['personalized_characters']) or 0),
             'narration': str(_val(data, COL_ALIASES['narration']) or ''),
@@ -273,6 +289,8 @@ def generate_order_bundle(row: dict, base_out: Path) -> tuple[Path, Path]:
 def api_import(temp_path: str):
     try:
         rows = parse_orders(Path(temp_path))
+        for r in rows:
+            generate_prompts(r)
         ORDERS.extend(rows)
         return {'rows': rows}
     except Exception as e:
@@ -383,8 +401,8 @@ def load_sample_orders() -> None:
         s.setdefault('revisions', 0)
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
-        s['status'] = 'Pending to prompt'
         s['pages'] = pages_for_cover(s['cover'])
+        generate_prompts(s)
     ORDERS.extend(samples)
     refresh_table()
 
@@ -405,38 +423,6 @@ def render_downloads() -> None:
                     ui.link('Ver libro', f'/downloads/{folder}/docs/book.pdf', new_tab=True)
                     if d.get('audio'):
                         ui.audio(f'/downloads/{folder}/audio/voice.mp3').props('controls')
-
-
-async def generate_prompt(row: dict) -> None:
-    try:
-        story_pages = 10
-        num_books = books_for_cover(row.get('cover', ''))
-        prompts: list[str] = []
-        for i in range(num_books):
-            content = ("Genera un prompt breve para " +
-                       ("la continuación del cuento anterior " if i else "") +
-                       f"de {story_pages} páginas para {row['client']}." )
-            if OPENAI_API_KEY:
-                payload = {
-                    'model': 'gpt-4o-mini',
-                    'messages': [{'role': 'user', 'content': content}],
-                }
-                headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
-                r = requests.post('https://api.openai.com/v1/chat/completions', headers=headers, json=payload)
-                r.raise_for_status()
-                data = r.json()
-                prompts.append(data['choices'][0]['message']['content'])
-            else:
-                if i == 0:
-                    prompts.append(f"Historia para {row['client']} de {story_pages} páginas (Libro 1).")
-                else:
-                    prompts.append(f"Historia continuación para {row['client']} de {story_pages} páginas (Libro {i+1}).")
-        row['prompts'] = prompts
-        row['status'] = 'Pending to upload file'
-        refresh_table()
-        ui.notify('Prompts generados')
-    except Exception as e:
-        ui.notify(f'Error generando prompts: {e}', type='negative')
 
 
 async def open_storybook(row: dict) -> None:
@@ -486,11 +472,8 @@ def main_page() -> None:
     <q-td :props="props">
       <div class='row items-center q-gutter-sm'>
         <span>{{ props.row.status }}</span>
-        <q-btn v-if="props.row.status === 'Pending to prompt'"
-               label="Generar prompt"
-               @click="() => emit('generate_prompt', props.row.id)"/>
-        <q-btn v-else-if="props.row.status === 'Pending to upload file'"
-               label="Abrir Storybook"
+        <q-btn v-if="props.row.status === 'Prompt ready'"
+               label="Generar Libro"
                @click="() => emit('open_storybook', props.row.id)"/>
         <q-btn v-else-if="props.row.status === 'Pending yo revise PDF'"
                label="Marcar DONE"
@@ -504,7 +487,6 @@ def main_page() -> None:
         rid = e.args if isinstance(e.args, str) else e.args[0]
         return next(r for r in ORDERS if r['id'] == rid)
 
-    table.on('generate_prompt', lambda e: ui.run_async(generate_prompt(_row_from_event(e))))
     table.on('open_storybook', lambda e: ui.run_async(open_storybook(_row_from_event(e))))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()
