@@ -99,7 +99,6 @@ COL_ALIASES = {
     'client': ['client', 'cliente', 'name'],
     'email': ['email', 'correo'],
     'cover': ['cover'],
-    'pages': ['pages', 'paginas'],
     'tags': ['tags'],
     'personalized_characters': ['personalized_characters', 'characters'],
     'narration': ['narration'],
@@ -116,6 +115,19 @@ def _val(data: dict, names: Iterable[str]) -> Any:
         if n in data and pd.notna(data[n]):
             return data[n]
     return None
+
+
+def pages_for_cover(cover: str) -> int:
+    cover_l = cover.lower()
+    if cover_l == 'standard hardcover':
+        return 12
+    if cover_l == 'premium hardcover':
+        return 24
+    return 0
+
+
+def books_for_cover(cover: str) -> int:
+    return 2 if cover.lower() == 'premium hardcover' else 1
 
 
 def parse_orders(temp_path: Path) -> list[dict]:
@@ -136,7 +148,6 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'client': str(_val(data, COL_ALIASES['client']) or ''),
             'email': str(_val(data, COL_ALIASES['email']) or ''),
             'cover': str(_val(data, COL_ALIASES['cover']) or ''),
-            'pages': int(_val(data, COL_ALIASES['pages']) or 0),
             'status': 'Pending to prompt',
             'tags': [t.strip() for t in str(_val(data, COL_ALIASES['tags']) or '').split(',') if t.strip()],
             'personalized_characters': int(_val(data, COL_ALIASES['personalized_characters']) or 0),
@@ -147,6 +158,7 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'voice_text': str(_val(data, COL_ALIASES['voice_text']) or ''),
             'voice_sample': str(_val(data, COL_ALIASES['voice_sample']) or ''),
         }
+        row['pages'] = pages_for_cover(row['cover'])
         rows.append(row)
     return rows
 
@@ -271,13 +283,13 @@ def api_export_csv() -> StreamingResponse:
     def gen():
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(['id', 'created', 'order', 'client', 'email', 'cover', 'pages',
+        writer.writerow(['created', 'order', 'client', 'email', 'cover',
                          'personalized_characters', 'narration', 'revisions',
                          'status', 'tags', 'voice_name', 'voice_seed', 'voice_text'])
         for r in ORDERS:
             writer.writerow([
-                r['id'], r['created'], r['order'], r['client'], r['email'], r['cover'],
-                r['pages'], r['personalized_characters'], r['narration'],
+                r['created'], r['order'], r['client'], r['email'], r['cover'],
+                r['personalized_characters'], r['narration'],
                 r['revisions'], r['status'], ','.join(r['tags']),
                 r['voice_name'], r['voice_seed'], r['voice_text'],
             ])
@@ -319,45 +331,45 @@ def import_block() -> None:
 
 def load_sample_orders() -> None:
     samples = [
-        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com', 'pages': 12,
+        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
          'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr', 'voice', 'qr_audio'], 'voice_name': 'Luz',
          'voice_text': 'Hola, este es tu audiolibro...'},
-        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com', 'pages': 20,
+        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 1,
          'narration': 'None', 'revisions': 1,
          'tags': ['voice'], 'voice_name': 'Carlos', 'voice_text': 'Este es un mensaje sin QR.'},
-        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com', 'pages': 32,
+        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 2,
          'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': ['qr']},
-        {'order': '1004', 'client': 'Diego', 'email': '', 'pages': 40,
+        {'order': '1004', 'client': 'Diego', 'email': '',
          'cover': 'Standard Hardcover', 'personalized_characters': 3,
          'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_name': 'Elena', 'voice_text': 'Mensaje para libro sin email'},
-        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com', 'pages': 64,
+        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
          'narration': 'Narrated by your loved one', 'revisions': 1,
          'tags': ['qr_audio', 'voice'], 'voice_name': 'Mario', 'voice_seed': 'abc123',
          'voice_text': 'Mensaje con voice_seed y qr_audio'},
-        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com', 'pages': 20,
+        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 2,
          'narration': 'None', 'revisions': 0,
          'tags': ['qr', 'voice'], 'voice_text': 'Nombre con caracteres raros'},
-        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com', 'pages': 12,
+        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 1,
          'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': []},
-        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com', 'pages': 32,
+        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 0,
          'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_text': 'Este es un texto de prueba largo para comprobar la duración del audio generado. Incluye varias frases y pausas para simular un párrafo completo.'},
-        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com', 'pages': 40,
+        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 3,
          'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr']},
-        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com', 'pages': 64,
+        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 1,
          'narration': 'None', 'revisions': 1,
          'tags': ['qr', 'voice'], 'voice_name': 'Luz', 'voice_text': 'Mensaje final'},
@@ -372,6 +384,7 @@ def load_sample_orders() -> None:
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
         s['status'] = 'Pending to prompt'
+        s['pages'] = pages_for_cover(s['cover'])
     ORDERS.extend(samples)
     refresh_table()
 
@@ -396,30 +409,42 @@ def render_downloads() -> None:
 
 async def generate_prompt(row: dict) -> None:
     try:
-        if OPENAI_API_KEY:
-            payload = {
-                'model': 'gpt-4o-mini',
-                'messages': [{'role': 'user', 'content': f"Genera un prompt breve para un cuento de {row['pages']} páginas para {row['client']}."}],
-            }
-            headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
-            r = requests.post('https://api.openai.com/v1/chat/completions', headers=headers, json=payload)
-            r.raise_for_status()
-            data = r.json()
-            row['prompt'] = data['choices'][0]['message']['content']
-        else:
-            row['prompt'] = f"Historia para {row['client']} de {row['pages']} páginas."
+        story_pages = 10
+        num_books = books_for_cover(row.get('cover', ''))
+        prompts: list[str] = []
+        for i in range(num_books):
+            content = ("Genera un prompt breve para " +
+                       ("la continuación del cuento anterior " if i else "") +
+                       f"de {story_pages} páginas para {row['client']}." )
+            if OPENAI_API_KEY:
+                payload = {
+                    'model': 'gpt-4o-mini',
+                    'messages': [{'role': 'user', 'content': content}],
+                }
+                headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
+                r = requests.post('https://api.openai.com/v1/chat/completions', headers=headers, json=payload)
+                r.raise_for_status()
+                data = r.json()
+                prompts.append(data['choices'][0]['message']['content'])
+            else:
+                if i == 0:
+                    prompts.append(f"Historia para {row['client']} de {story_pages} páginas (Libro 1).")
+                else:
+                    prompts.append(f"Historia continuación para {row['client']} de {story_pages} páginas (Libro {i+1}).")
+        row['prompts'] = prompts
         row['status'] = 'Pending to upload file'
         refresh_table()
-        ui.notify('Prompt generado')
+        ui.notify('Prompts generados')
     except Exception as e:
-        ui.notify(f'Error generando prompt: {e}', type='negative')
+        ui.notify(f'Error generando prompts: {e}', type='negative')
 
 
 async def open_storybook(row: dict) -> None:
     try:
-        ui.open('https://gemini.google.com/gem/storybook')
-        if row.get('prompt'):
-            await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(row['prompt'])});")
+        prompts = row.get('prompts') or []
+        for p in prompts:
+            ui.open('https://gemini.google.com/gem/storybook')
+            await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(p)});")
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         audio_path = synth_voice(row, audio_dir)
         work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
@@ -439,12 +464,10 @@ def mark_done(row: dict) -> None:
 def main_page() -> None:
     global table, download_container
     columns = [
-        {'name': 'id', 'label': 'ID', 'field': 'id', 'sortable': False},
         {'name': 'order', 'label': 'Pedido', 'field': 'order'},
         {'name': 'client', 'label': 'Cliente', 'field': 'client'},
         {'name': 'email', 'label': 'Email', 'field': 'email'},
         {'name': 'cover', 'label': 'Cubierta', 'field': 'cover'},
-        {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
         {'name': 'personalized_characters', 'label': 'Personajes', 'field': 'personalized_characters'},
         {'name': 'narration', 'label': 'Narración', 'field': 'narration'},
         {'name': 'revisions', 'label': 'Revisiones', 'field': 'revisions'},
