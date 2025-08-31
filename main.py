@@ -147,7 +147,6 @@ def generate_prompts(row: dict) -> None:
     row['prompts'] = prompts
     row['status'] = 'Prompt ready'
 
-
 def parse_orders(temp_path: Path) -> list[dict]:
     if temp_path.suffix.lower() in {'.xlsx', '.xls'}:
         df = pd.read_excel(temp_path)
