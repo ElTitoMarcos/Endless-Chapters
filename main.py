@@ -164,6 +164,51 @@ def generate_prompts(row: dict) -> None:
     row['prompts'] = prompts
     row['status'] = 'Prompt ready'
 
+def books_for_cover(cover: str) -> int:
+    return 2 if cover.lower() == 'premium hardcover' else 1
+
+
+def generate_prompts(row: dict) -> None:
+    """Build Gemini Storybook prompts based on order specs."""
+    specs = [f"Crea un cuento para {row['client']}"]
+    pcs = row.get('personalized_characters')
+    if pcs:
+        specs.append(f"incluye {pcs} personajes personalizados")
+    narration = row.get('narration')
+    if narration and narration.lower() != 'none':
+        specs.append(f"narración: {narration}")
+    base = '. '.join(specs) + '. No menciones número de páginas ni tipo de cubierta.'
+    prompts: list[str] = []
+    for i in range(books_for_cover(row.get('cover', ''))):
+        extra = " Continúa la historia del libro anterior." if i else ""
+        prompt_input = base + extra
+        if OPENAI_API_KEY:
+            try:
+                payload = {
+                    'model': 'gpt-4o',
+                    'messages': [
+                        {'role': 'system', 'content': 'Eres un asistente que genera prompts para Gemini Storybook.'},
+                        {'role': 'user', 'content': prompt_input},
+                    ],
+                }
+                r = requests.post('https://api.openai.com/v1/chat/completions',
+                                   headers={'Authorization': f'Bearer {OPENAI_API_KEY}'},
+                                   json=payload, timeout=20)
+                if r.status_code == 200:
+                    content = r.json()['choices'][0]['message']['content'].strip()
+                    prompts.append(content)
+                else:
+                    logger.warning('OpenAI prompt error %s: %s', r.status_code, r.text)
+                    prompts.append(prompt_input)
+            except Exception as e:
+                logger.error('OpenAI prompt failed: %s', e)
+                prompts.append(prompt_input)
+        else:
+            prompts.append(prompt_input)
+    row['prompts'] = prompts
+    row['status'] = 'Prompt ready'
+
+
 def parse_orders(temp_path: Path) -> list[dict]:
     if temp_path.suffix.lower() in {'.xlsx', '.xls'}:
         df = pd.read_excel(temp_path)
@@ -336,8 +381,8 @@ def api_export_csv() -> StreamingResponse:
 # ---------------------------------------------------------------------------
 # UI
 
-    table: ui.table
-    download_container: ui.column
+table: ui.table
+download_container: ui.column
 
 
 def refresh_table() -> None:
@@ -357,12 +402,6 @@ async def handle_upload(e: UploadEventArguments) -> None:
         return
     ui.notify(f"{len(data['rows'])} filas importadas")
     refresh_table()
-
-def import_block() -> None:
-    with ui.card().classes('p-4'):
-        ui.label('Importar pedidos (CSV/Excel)')
-        ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
-
 
 def api_key_block() -> None:
     with ui.card().classes('p-4'):
@@ -387,8 +426,15 @@ def api_key_block() -> None:
 
         ui.button('Verificar', on_click=verify)
 
-async def load_sample_orders() -> None:
 
+def import_block() -> None:
+    api_key_block()
+    with ui.card().classes('p-4'):
+        ui.label('Importar pedidos (CSV/Excel)')
+        ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
+
+
+async def load_sample_orders() -> None:
     samples = [
         {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
@@ -504,11 +550,7 @@ def main_page() -> None:
         with ui.row():
             ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
-            ui.button('Cargar pedidos de prueba', on_click=lambda: ui.run_async(load_sample_orders()))
-
-    api_key_block()
-
-    api_key_block()
+            ui.button('Cargar pedidos de prueba', on_click=lambda: asyncio.create_task(load_sample_orders()))
 
     table = ui.table(columns=columns, rows=ORDERS, row_key='id')
 
@@ -531,7 +573,7 @@ def main_page() -> None:
         rid = e.args if isinstance(e.args, str) else e.args[0]
         return next(r for r in ORDERS if r['id'] == rid)
 
-    table.on('open_storybook', lambda e: ui.run_async(open_storybook(_row_from_event(e))))
+    table.on('open_storybook', lambda e: asyncio.create_task(open_storybook(_row_from_event(e))))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()
     download_container = ui.column()
