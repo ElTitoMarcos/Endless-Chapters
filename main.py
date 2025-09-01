@@ -130,16 +130,19 @@ def _build_notebook_text(row: dict) -> str:
     lines: list[str] = [
         "Genera una historia a partir de la siguiente información:",
     ]
+    cover = (row.get('cover') or '').lower()
+    photos = row.get('photos') or []
+    if cover == 'premium hardcover':
+        lines.append("La historia debe dividirse en dos partes.")
     story = (row.get('story') or '').strip()
     if story:
         lines.append(story)
     names = row.get('character_names') or []
-    for name in names:
-        lines.append(f"{name} debe corresponder a la foto adjunta.")
-    if names:
-        lines.append(
-            "Los personajes deben corresponder a las fotos adjuntas."
-        )
+    if photos and names:
+        for name in names:
+            lines.append(
+                f"El personaje {name} tiene que ser el de la foto adjunta."
+            )
     return "\n".join(lines).strip()
 
 def prepare_notebook_text(row: dict) -> None:
