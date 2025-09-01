@@ -19,7 +19,12 @@ def get_sample_orders() -> list[dict]:
             'voice_name': 'Luz',
             'voice_seed': 'abc123',
             'voice_text': 'Hola, este es tu audiolibro...',
-            'story': 'Ana y su gato exploran un bosque mágico.'
+            'story': (
+                'Ana y su gato Ori\u00f3n se internan en un bosque donde '
+                'luci\u00e9rnagas iluminan \u00e1rboles que susurran secretos. '
+                'Siguen un sendero de piedras brillantes y hallan una '
+                'cascada que concede deseos a quienes creen.'
+            )
         },
         {
             'order': '1002',
@@ -32,7 +37,12 @@ def get_sample_orders() -> list[dict]:
             'tags': ['voice'],
             'voice_name': 'Carlos',
             'voice_text': 'Este es un mensaje sin QR.',
-            'story': 'Mateo ayuda a encender el faro antes de la tormenta.',
+            'story': (
+                'Mateo recibe el encargo de encender el viejo faro de su '
+                'abuelo ante una tormenta. Con su perro Foco, sube '
+                'escalones gastados, limpia el cristal salado y logra que '
+                'la luz gu\u00ede a los barcos perdidos.'
+            ),
             'character_names': ['Mateo']
         },
         {
@@ -44,7 +54,12 @@ def get_sample_orders() -> list[dict]:
             'narration': 'Narrated by your loved one',
             'revisions': 2,
             'tags': ['qr'],
-            'story': 'Carla encuentra un libro encantado que cobra vida.',
+            'story': (
+                'Carla descubre en el \u00e1tico de su abuela un libro '
+                'cubierto de polvo. Al abrirlo, las palabras se elevan como '
+                'chispas y la llevan junto a su mam\u00e1 a mares de nubes '
+                'donde cada decisi\u00f3n cambia la aventura.'
+            ),
             'character_names': ['Carla', 'Mamá']
         }
     ]

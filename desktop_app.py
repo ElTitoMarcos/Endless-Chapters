@@ -24,7 +24,7 @@ def load_samples() -> None:
             messagebox.showerror('Error', f'No se pudieron preparar los datos: {e}')
             break
     refresh_table()
-    
+
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
     for btns in ROW_BUTTONS.values():
