@@ -43,10 +43,10 @@ La aplicación pedirá la clave de OpenAI si no está configurada y la guardará
 
 Ejecuta `python generate_sample_orders.py` para crear `sample_orders.csv` con ejemplos que cubren combinaciones de etiquetas `voz` y `qr` y distintos tipos de cubierta. Importa este archivo desde la interfaz para verificar que todo funcione correctamente.
 
-El botón **Generar Libro** copia el primer prompt en el portapapeles y abre la página de Gemini Storybook sin descargar archivos. Para cubiertas **Premium Hardcover** aparece además un botón **Copiar Prompt 2** con la continuación del cuento (24 páginas en total: 2 libros de 10 páginas más 4 de relleno).
+El botón **Generar Storybook** abre la página de Gemini Storybook sin descargar archivos. Aparece después de pegar en NotebookLM el texto generado por GPT.
 
 ### Flujo de estados
-Cada pedido avanza por los siguientes estados: "Pending to NotebookLM" → "Pending to Storybook" → "ready to generate Book" → "Prompt 1 copiado" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
+Cada pedido avanza por los siguientes estados: "Pending to NotebookLM" → "Pending to Storybook" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
 
 ## Empaquetar en .EXE (Windows)
 ```powershell
