@@ -552,6 +552,11 @@ def main_page() -> None:
 # Run app
 
 if __name__ in {'__main__', '__mp_main__'}:
-    # Run the interface as a local desktop app instead of serving it remotely
-    ui.run(native=True, port=8080, reload=False)
-
+    # Try to launch as a desktop app; fall back to browser mode if pywebview
+    # or the native backend is unavailable.
+    try:
+        import webview  # type: ignore
+        ui.run(native=True, port=8080, reload=False)
+    except Exception as e:  # pragma: no cover - fallback for missing native deps
+        logger.warning('Native mode unavailable: %s. Using browser mode.', e)
+        ui.run(port=8080, reload=False)
