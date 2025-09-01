@@ -16,7 +16,6 @@ ORDERS: list[dict] = []
 ROW_BUTTONS: dict[str, list[Button]] = {}
 api_button: Button | None = None
 
-
 def load_samples() -> None:
     """Load three sample orders and populate the table."""
     ORDERS.clear()
@@ -47,7 +46,6 @@ def prompt_api_key() -> None:
         if api_button:
             api_button.destroy()
             api_button = None
-
 
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
@@ -122,13 +120,11 @@ def generate_order(row_id: str) -> None:
         refresh_table()
         messagebox.showinfo('Listo', 'Prompt 1 copiado al portapapeles')
 
-
 def copy_prompt2(row_id: str) -> None:
     row = next(r for r in ORDERS if r['id'] == row_id)
     if len(row.get('prompts', [])) > 1:
         pyperclip.copy(row['prompts'][1])
         messagebox.showinfo('Listo', 'Prompt 2 copiado al portapapeles')
-
 
 root = Tk()
 root.title('Endless Chapters')
