@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 import webbrowser
-from tkinter import Tk, Frame, Button, messagebox
+from tkinter import Tk, Frame, Button, messagebox, filedialog
 from tkinter import ttk
 
 import pyperclip
 
-from main import prepare_notebook_text
+from pathlib import Path
+import tempfile
+
+from main import (
+    prepare_notebook_text,
+    books_for_cover,
+    synth_voice,
+    generate_order_bundle,
+    DOWNLOAD_DIR,
+    ASSETS_DIR,
+)
+from postprocess import postprocess_storybooks
 from sample_orders import get_sample_orders
 
 ORDERS: list[dict] = []
@@ -76,6 +87,14 @@ def _place_buttons() -> None:
             )
             btn.place(x=x, y=y, width=w, height=h)
             buttons.append(btn)
+        elif status == 'Pending storybook upload':
+            btn = Button(
+                tree,
+                text='Subir Storybook',
+                command=lambda rid=row['id']: upload_storybook(rid),
+            )
+            btn.place(x=x, y=y, width=w, height=h)
+            buttons.append(btn)
         ROW_BUTTONS[row['id']] = buttons
 
 
@@ -93,9 +112,33 @@ def open_notebooklm(row_id: str) -> None:
 def open_storybook(row_id: str) -> None:
     row = next(r for r in ORDERS if r['id'] == row_id)
     webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
-    row['status'] = 'DONE'
+    row['status'] = 'Pending storybook upload'
     refresh_table()
-    messagebox.showinfo('Listo', 'Abriendo Storybook')
+    messagebox.showinfo('Listo', 'Genera el Storybook y luego súbelo')
+
+
+def upload_storybook(row_id: str) -> None:
+    row = next(r for r in ORDERS if r['id'] == row_id)
+    expected = books_for_cover(row.get('cover', ''))
+    files = filedialog.askopenfilenames(filetypes=[('PDF', '*.pdf')])
+    if not files:
+        return
+    if len(files) != expected:
+        messagebox.showerror('Error', f'Se esperaban {expected} archivos')
+        return
+    try:
+        temp_dir = Path(tempfile.mkdtemp())
+        paths = [Path(f) for f in files]
+        final_pdf = temp_dir / 'storybook.pdf'
+        postprocess_storybooks(paths, final_pdf, ASSETS_DIR / 'logo nuevo png.png')
+        audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
+        synth_voice(row, audio_dir)
+        generate_order_bundle(row, DOWNLOAD_DIR, final_pdf)
+        row['status'] = 'Pending yo revise PDF'
+        messagebox.showinfo('Listo', 'Storybook procesado')
+    except Exception as e:
+        messagebox.showerror('Error', f'No se pudo procesar: {e}')
+    refresh_table()
 
 
 root = Tk()
