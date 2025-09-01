@@ -16,7 +16,6 @@ from sample_orders import get_sample_orders
 ORDERS: list[dict] = []
 ROW_BUTTONS: dict[str, Button] = {}
 
-
 def load_samples() -> None:
     """Load three sample orders and populate the table."""
     ORDERS.clear()
@@ -40,7 +39,6 @@ def prompt_api_key() -> None:
         os.environ['OPENAI_API_KEY'] = key
         main.OPENAI_API_KEY = key
         set_key(str(main.BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
-
 
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
