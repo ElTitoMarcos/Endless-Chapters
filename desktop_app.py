@@ -40,7 +40,6 @@ def prompt_api_key() -> None:
         main.OPENAI_API_KEY = key
         set_key(str(main.BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
 
-
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
     for row in ORDERS:
@@ -90,5 +89,4 @@ Button(btns, text='Generar Libro', command=generate_selected).pack(side='left', 
 # Prompt for key and load initial sample orders
 prompt_api_key()
 load_samples()
-
 root.mainloop()
