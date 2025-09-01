@@ -18,7 +18,7 @@ import qrcode
 import requests
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import LETTER
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 
 from nicegui import ui, app
 from nicegui.events import UploadEventArguments
@@ -163,6 +163,51 @@ def generate_prompts(row: dict) -> None:
             prompts.append(prompt_input)
     row['prompts'] = prompts
     row['status'] = 'Prompt ready'
+
+def books_for_cover(cover: str) -> int:
+    return 2 if cover.lower() == 'premium hardcover' else 1
+
+
+def generate_prompts(row: dict) -> None:
+    """Build Gemini Storybook prompts based on order specs."""
+    specs = [f"Crea un cuento para {row['client']}"]
+    pcs = row.get('personalized_characters')
+    if pcs:
+        specs.append(f"incluye {pcs} personajes personalizados")
+    narration = row.get('narration')
+    if narration and narration.lower() != 'none':
+        specs.append(f"narración: {narration}")
+    base = '. '.join(specs) + '. No menciones número de páginas ni tipo de cubierta.'
+    prompts: list[str] = []
+    for i in range(books_for_cover(row.get('cover', ''))):
+        extra = " Continúa la historia del libro anterior." if i else ""
+        prompt_input = base + extra
+        if OPENAI_API_KEY:
+            try:
+                payload = {
+                    'model': 'gpt-4o',
+                    'messages': [
+                        {'role': 'system', 'content': 'Eres un asistente que genera prompts para Gemini Storybook.'},
+                        {'role': 'user', 'content': prompt_input},
+                    ],
+                }
+                r = requests.post('https://api.openai.com/v1/chat/completions',
+                                   headers={'Authorization': f'Bearer {OPENAI_API_KEY}'},
+                                   json=payload, timeout=20)
+                if r.status_code == 200:
+                    content = r.json()['choices'][0]['message']['content'].strip()
+                    prompts.append(content)
+                else:
+                    logger.warning('OpenAI prompt error %s: %s', r.status_code, r.text)
+                    prompts.append(prompt_input)
+            except Exception as e:
+                logger.error('OpenAI prompt failed: %s', e)
+                prompts.append(prompt_input)
+        else:
+            prompts.append(prompt_input)
+    row['prompts'] = prompts
+    row['status'] = 'Prompt ready'
+
 
 def books_for_cover(cover: str) -> int:
     return 2 if cover.lower() == 'premium hardcover' else 1
@@ -418,6 +463,7 @@ def api_key_block() -> None:
             if verify_openai_key(key):
                 OPENAI_API_KEY = key
                 os.environ['OPENAI_API_KEY'] = key
+                set_key(str(BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
                 status.text = 'Clave verificada'
                 ui.notify('Clave verificada')
             else:
@@ -488,9 +534,10 @@ async def load_sample_orders() -> None:
         s.setdefault('revisions', 0)
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
-        await asyncio.to_thread(generate_prompts, s)
+    await asyncio.gather(*(asyncio.to_thread(generate_prompts, s) for s in samples))
     ORDERS.extend(samples)
     refresh_table()
+    ui.notify('Pedidos de prueba cargados')
 
 
 def render_downloads() -> None:

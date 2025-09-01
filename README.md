@@ -27,7 +27,7 @@ Abrirá el navegador en http://127.0.0.1:8080
 
 ### Clave de API de OpenAI
 
-En la interfaz hay un bloque para introducir y verificar tu clave de OpenAI. Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI.
+En la interfaz hay un bloque para introducir y verificar tu clave de OpenAI. Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI. Tras comprobarse se guarda en el archivo `.env`, de modo que no tendrás que volver a introducirla.
 
 ## Columnas reconocidas en Excel/CSV
 - order, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), personalized_characters, narration, revisions, voice_sample
