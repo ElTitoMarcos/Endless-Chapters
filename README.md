@@ -27,7 +27,7 @@ Al arrancar se solicitará tu clave de OpenAI y se abrirá una ventana vacía; p
 
 ### Clave de API de OpenAI
 
-La aplicación pedirá la clave de OpenAI si no está configurada. Puedes volver a cambiarla desde el botón "Configurar API Key". Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI. Tras introducirla se guarda en el archivo `.env`.
+La aplicación pedirá la clave de OpenAI si no está configurada y la guardará en el archivo `.env`. Para cambiarla más adelante edita dicho archivo manualmente. Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI.
 
 ## Columnas reconocidas en Excel/CSV
 - order, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), personalized_characters, narration, revisions, voice_sample
@@ -43,8 +43,10 @@ La aplicación pedirá la clave de OpenAI si no está configurada. Puedes volver
 
 Ejecuta `python generate_sample_orders.py` para crear `sample_orders.csv` con ejemplos que cubren combinaciones de etiquetas `voz` y `qr` y distintos tipos de cubierta. Importa este archivo desde la interfaz para verificar que todo funcione correctamente.
 
+El botón **Generar Libro** copia el primer prompt en el portapapeles y abre la página de Gemini Storybook sin descargar archivos. Para cubiertas **Premium Hardcover** aparece además un botón **Copiar Prompt 2** con la continuación del cuento (24 páginas en total: 2 libros de 10 páginas más 4 de relleno).
+
 ### Flujo de estados
-Cada pedido avanza por los siguientes estados: "Prompt ready" → "Pending yo revise PDF" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
+Cada pedido avanza por los siguientes estados: "Prompt ready" → "Prompt 1 copiado" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
 
 ## Empaquetar en .EXE (Windows)
 ```powershell

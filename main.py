@@ -128,7 +128,7 @@ def books_for_cover(cover: str) -> int:
 
 
 def pages_for_cover(cover: str) -> int:
-    return 64 if cover.lower() == 'premium hardcover' else 32
+    return 24 if cover.lower() == 'premium hardcover' else 32
 
 
 def generate_prompts(row: dict) -> None:
