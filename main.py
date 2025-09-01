@@ -9,6 +9,7 @@ import uuid
 import zipfile
 import io
 import asyncio
+import webbrowser
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Iterable
@@ -23,6 +24,8 @@ from dotenv import load_dotenv, set_key
 from nicegui import ui, app, Client
 from nicegui.events import UploadEventArguments
 from fastapi.responses import JSONResponse, StreamingResponse
+import pyperclip
+from sample_orders import get_sample_orders
 
 # ---------------------------------------------------------------------------
 # Environment & paths
@@ -35,6 +38,7 @@ load_dotenv()
 VOICE_PROVIDER = os.getenv('VOICE_PROVIDER', 'offline').lower()
 XI_API_KEY = os.getenv('XI_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'tu_gemini')
 BASE_PUBLIC_URL = os.getenv('BASE_PUBLIC_URL', 'http://localhost:8080')
 
 logging.basicConfig(level=logging.INFO)
@@ -78,10 +82,12 @@ def zip_dir(src: Path, zip_path: Path) -> None:
                 z.write(p, p.relative_to(src))
 
 
-def verify_openai_key(key: str) -> bool:
+def verify_gemini_key(key: str) -> bool:
     try:
-        r = requests.get('https://api.openai.com/v1/models',
-                         headers={'Authorization': f'Bearer {key}'}, timeout=10)
+        r = requests.get(
+            f'https://generativelanguage.googleapis.com/v1beta/models?key={key}',
+            timeout=10,
+        )
         return r.status_code == 200
     except Exception as e:
         logger.error('verify key failed: %s', e)
@@ -125,7 +131,7 @@ def books_for_cover(cover: str) -> int:
 
 
 def pages_for_cover(cover: str) -> int:
-    return 64 if cover.lower() == 'premium hardcover' else 32
+    return 24 if cover.lower() == 'premium hardcover' else 32
 
 
 def generate_prompts(row: dict) -> None:
@@ -142,26 +148,39 @@ def generate_prompts(row: dict) -> None:
     for i in range(books_for_cover(row.get('cover', ''))):
         extra = " Continúa la historia del libro anterior." if i else ""
         prompt_input = base + extra
-        if OPENAI_API_KEY:
+        if GEMINI_API_KEY and GEMINI_API_KEY != 'tu_gemini':
             try:
-                payload = {
-                    'model': 'gpt-4o',
-                    'messages': [
-                        {'role': 'system', 'content': 'Eres un asistente que genera prompts para Gemini Storybook.'},
-                        {'role': 'user', 'content': prompt_input},
-                    ],
+                body = {
+                    'contents': [{
+                        'role': 'user',
+                        'parts': [{'text': prompt_input}],
+                    }],
+                    'generationConfig': {
+                        'temperature': 0.2,
+                        'maxOutputTokens': 600,
+                    },
                 }
-                r = requests.post('https://api.openai.com/v1/chat/completions',
-                                   headers={'Authorization': f'Bearer {OPENAI_API_KEY}'},
-                                   json=payload, timeout=20)
+                url = (
+                    'https://generativelanguage.googleapis.com/v1beta/models/'
+                    'gemini-1.5-flash:generateContent'
+                    f'?key={GEMINI_API_KEY}'
+                )
+                r = requests.post(url, headers={'Content-Type': 'application/json'}, json=body, timeout=20)
                 if r.status_code == 200:
-                    content = r.json()['choices'][0]['message']['content'].strip()
-                    prompts.append(content)
+                    data = r.json()
+                    content = (
+                        data.get('candidates', [{}])[0]
+                        .get('content', {})
+                        .get('parts', [{}])[0]
+                        .get('text', '')
+                        .strip()
+                    )
+                    prompts.append(content or prompt_input)
                 else:
-                    logger.warning('OpenAI prompt error %s: %s', r.status_code, r.text)
+                    logger.warning('Gemini prompt error %s: %s', r.status_code, r.text)
                     prompts.append(prompt_input)
             except Exception as e:
-                logger.error('OpenAI prompt failed: %s', e)
+                logger.error('Gemini prompt failed: %s', e)
                 prompts.append(prompt_input)
         else:
             prompts.append(prompt_input)
@@ -365,20 +384,20 @@ async def handle_upload(e: UploadEventArguments) -> None:
 
 def api_key_block() -> None:
     with ui.card().classes('p-4'):
-        ui.label('Configurar OpenAI')
-        key_input = ui.input('API key', password=True, value=OPENAI_API_KEY or '').props('clearable')
+        ui.label('Configurar Gemini')
+        key_input = ui.input('API key', password=True, value=GEMINI_API_KEY or '').props('clearable')
         status = ui.label('')
 
         def verify() -> None:
-            global OPENAI_API_KEY
+            global GEMINI_API_KEY
             key = key_input.value.strip()
             if not key:
                 ui.notify('Introduce una clave', type='warning')
                 return
-            if verify_openai_key(key):
-                OPENAI_API_KEY = key
-                os.environ['OPENAI_API_KEY'] = key
-                set_key(str(BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
+            if verify_gemini_key(key):
+                GEMINI_API_KEY = key
+                os.environ['GEMINI_API_KEY'] = key
+                set_key(str(BASE_DIR / '.env'), 'GEMINI_API_KEY', key)
                 status.text = 'Clave verificada'
                 ui.notify('Clave verificada')
             else:
@@ -396,59 +415,7 @@ def import_block() -> None:
 
 
 async def load_sample_orders(client: Client) -> None:
-    samples = [
-        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 0,
-         'narration': 'Narrated by your loved one', 'revisions': 0,
-         'tags': ['qr', 'voice', 'qr_audio'], 'voice_name': 'Luz',
-         'voice_text': 'Hola, este es tu audiolibro...'},
-        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 1,
-         'narration': 'None', 'revisions': 1,
-         'tags': ['voice'], 'voice_name': 'Carlos', 'voice_text': 'Este es un mensaje sin QR.'},
-        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 2,
-         'narration': 'Narrated by your loved one', 'revisions': 2,
-         'tags': ['qr']},
-        {'order': '1004', 'client': 'Diego', 'email': '',
-         'cover': 'Standard Hardcover', 'personalized_characters': 3,
-         'narration': 'None', 'revisions': 3,
-         'tags': ['voice'], 'voice_name': 'Elena', 'voice_text': 'Mensaje para libro sin email'},
-        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 0,
-         'narration': 'Narrated by your loved one', 'revisions': 1,
-         'tags': ['qr_audio', 'voice'], 'voice_name': 'Mario', 'voice_seed': 'abc123',
-         'voice_text': 'Mensaje con voice_seed y qr_audio'},
-        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 2,
-         'narration': 'None', 'revisions': 0,
-         'tags': ['qr', 'voice'], 'voice_text': 'Nombre con caracteres raros'},
-        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 1,
-         'narration': 'Narrated by your loved one', 'revisions': 2,
-         'tags': []},
-        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 0,
-         'narration': 'None', 'revisions': 3,
-         'tags': ['voice'], 'voice_text': 'Este es un texto de prueba largo para comprobar la duración del audio generado. Incluye varias frases y pausas para simular un párrafo completo.'},
-        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 3,
-         'narration': 'Narrated by your loved one', 'revisions': 0,
-         'tags': ['qr']},
-        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 1,
-         'narration': 'None', 'revisions': 1,
-         'tags': ['qr', 'voice'], 'voice_name': 'Luz', 'voice_text': 'Mensaje final'},
-    ]
-    for s in samples:
-        s.setdefault('voice_name', '')
-        s.setdefault('voice_seed', '')
-        s.setdefault('voice_text', '')
-        s.setdefault('personalized_characters', 0)
-        s.setdefault('narration', 'None')
-        s.setdefault('revisions', 0)
-        s['id'] = str(uuid.uuid4())
-        s['created'] = str(datetime.now().date())
+    samples = get_sample_orders()
     await asyncio.gather(*(asyncio.to_thread(generate_prompts, s) for s in samples))
     ORDERS.extend(samples)
     refresh_table()
@@ -477,13 +444,9 @@ def render_downloads() -> None:
 async def open_storybook(row: dict, client: Client) -> None:
     try:
         prompts = row.get('prompts') or []
-        with client:
-            for p in prompts:
-                script = (
-                    f"navigator.clipboard.writeText({json.dumps(p)});"
-                    "window.open('https://gemini.google.com/gem/storybook', '_blank');"
-                )
-                await ui.run_javascript(script)
+        if prompts:
+            pyperclip.copy(prompts[0])
+            webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         audio_path = synth_voice(row, audio_dir)
         work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)

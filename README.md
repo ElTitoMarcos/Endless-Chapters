@@ -3,8 +3,8 @@
 
 App local con interfaz para:
 - Importar pedidos desde Excel/CSV
-- Configurar y verificar la clave de OpenAI
-- Generar prompts por pedido automáticamente usando GPT-4o
+- Configurar y verificar la clave de Gemini
+- Generar prompts por pedido automáticamente usando Gemini (modelo base de NotebookLM)
 - Subir texto (JSON o TXT) y audio (opcional)
 - Producir PDF listo para imprenta (portada color con logo, interior en grises, QR a audio)
 - Clonar voz a partir de un archivo de audio y generar locuciones del texto
@@ -19,15 +19,15 @@ App local con interfaz para:
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python main.py
+python desktop_app.py
 ```
-Abrirá el navegador en http://127.0.0.1:8080
+Al arrancar se solicitará tu clave de Gemini y se abrirá una ventana vacía; pulsa "Cargar pedidos de prueba" para ver ejemplos.
 
 > Nota: la clonación de voz con muestras requiere la librería opcional `TTS`, disponible solo para versiones de Python anteriores a 3.12. Si no está instalada, la aplicación usará `pyttsx3` con una voz genérica.
 
-### Clave de API de OpenAI
+### Clave de API de Gemini
 
-En la interfaz hay un bloque para introducir y verificar tu clave de OpenAI. Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI. Tras comprobarse se guarda en el archivo `.env`, de modo que no tendrás que volver a introducirla.
+La aplicación pedirá la clave de Gemini si no está configurada y la guardará en el archivo `.env`. Para cambiarla más adelante edita dicho archivo manualmente. Esta clave se utiliza para generar los prompts de Gemini Storybook (basados en el mismo modelo que NotebookLM).
 
 ## Columnas reconocidas en Excel/CSV
 - order, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), personalized_characters, narration, revisions, voice_sample
@@ -43,8 +43,10 @@ En la interfaz hay un bloque para introducir y verificar tu clave de OpenAI. Est
 
 Ejecuta `python generate_sample_orders.py` para crear `sample_orders.csv` con ejemplos que cubren combinaciones de etiquetas `voz` y `qr` y distintos tipos de cubierta. Importa este archivo desde la interfaz para verificar que todo funcione correctamente.
 
+El botón **Generar Libro** copia el primer prompt en el portapapeles y abre la página de Gemini Storybook sin descargar archivos. Para cubiertas **Premium Hardcover** aparece además un botón **Copiar Prompt 2** con la continuación del cuento (24 páginas en total: 2 libros de 10 páginas más 4 de relleno).
+
 ### Flujo de estados
-Cada pedido avanza por los siguientes estados: "Prompt ready" → "Pending yo revise PDF" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
+Cada pedido avanza por los siguientes estados: "Prompt ready" → "Prompt 1 copiado" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
 
 ## Empaquetar en .EXE (Windows)
 ```powershell

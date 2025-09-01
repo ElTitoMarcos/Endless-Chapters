@@ -12,3 +12,4 @@ pikepdf>=9.2
 pyttsx3>=2.90
 python-dotenv>=1.0
 requests>=2.31
+pyperclip>=1.8
