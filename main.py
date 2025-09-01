@@ -474,22 +474,28 @@ def render_downloads() -> None:
                         ui.audio(f'/downloads/{folder}/audio/voice.mp3').props('controls')
 
 
-async def open_storybook(row: dict) -> None:
+async def open_storybook(row: dict, client: Client) -> None:
     try:
         prompts = row.get('prompts') or []
-        for p in prompts:
-            await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(p)});")
-            ui.open('https://gemini.google.com/gem/storybook')
+        with client:
+            for p in prompts:
+                script = (
+                    f"navigator.clipboard.writeText({json.dumps(p)});"
+                    "window.open('https://gemini.google.com/gem/storybook', '_blank');"
+                )
+                await ui.run_javascript(script)
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         audio_path = synth_voice(row, audio_dir)
         work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
         row['status'] = 'Pending yo revise PDF'
         DOWNLOADS.append({'order': row['order'], 'zip': zip_path, 'dir': work_dir, 'audio': audio_path})
-        refresh_table()
-        render_downloads()
-        ui.notify('Libro generado, revisa el PDF')
+        with client:
+            refresh_table()
+            render_downloads()
+            ui.notify('Libro generado, revisa el PDF')
     except Exception as e:
-        ui.notify(f'Error preparando libro: {e}', type='negative')
+        with client:
+            ui.notify(f'Error preparando libro: {e}', type='negative')
 
 
 def mark_done(row: dict) -> None:
@@ -536,7 +542,7 @@ def main_page() -> None:
         rid = e.args if isinstance(e.args, str) else e.args[0]
         return next(r for r in ORDERS if r['id'] == rid)
 
-    table.on('open_storybook', lambda e: asyncio.create_task(open_storybook(_row_from_event(e))))
+    table.on('open_storybook', lambda e: asyncio.create_task(open_storybook(_row_from_event(e), e.client)))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()
     download_container = ui.column()
