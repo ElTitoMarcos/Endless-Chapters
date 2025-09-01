@@ -8,10 +8,9 @@ ORDERS = [
         "email": "luna@example.com",
         "tags": "voz",
         "notes": (
-            "Luna y su gato Orión se internan en un bosque donde luciérnagas "
-            "iluminan árboles que susurran secretos. Siguen un sendero de "
-            "piedras brillantes y hallan una cascada que concede deseos a "
-            "quienes creen."
+            "Luna prepara con su padre una caja de recuerdos para su hermanito "
+            "recién nacido. Mientras acomodan fotos y cartas, el gato Orión los "
+            "observa y ambos aprenden el valor de cuidar la historia familiar."
         ),
         "cover": "Premium Hardcover",
         "wants_voice": "true",
@@ -26,10 +25,9 @@ ORDERS = [
         "email": "mateo@example.com",
         "tags": "qr",
         "notes": (
-            "Mateo recibe el encargo de encender el viejo faro de su abuelo "
-            "ante una tormenta. Con su perro Foco, sube escalones gastados, "
-            "limpia el cristal salado y logra que la luz guíe a los barcos "
-            "perdidos."
+            "Mateo ayuda a su abuelo a reparar la bicicleta familiar para que su "
+            "hermana pueda aprender a montar. Entre herramientas y risas, "
+            "escuchan historias de juventud y fortalecen la unión de tres generaciones."
         ),
         "cover": "Standard Hardcover",
         "wants_voice": "false",
@@ -44,10 +42,9 @@ ORDERS = [
         "email": "sofia@example.com",
         "tags": "voz,qr",
         "notes": (
-            "Sofía descubre en el ático de su abuela un libro cubierto de "
-            "polvo. Al abrirlo, las palabras se elevan como chispas y la "
-            "llevan con su amiga Clara a mares de nubes donde cada decisión "
-            "cambia la aventura."
+            "Sofía encuentra en el ático cartas que sus bisabuelos se enviaban "
+            "cuando estaban lejos. Junto a su amiga Clara las lee en voz alta y "
+            "descubre cómo el amor y la paciencia mantuvieron unida a la familia."
         ),
         "cover": "Premium Hardcover",
         "wants_voice": "true",
@@ -62,10 +59,9 @@ ORDERS = [
         "email": "diego@example.com",
         "tags": "",
         "notes": (
-            "Diego arma una nave de cartón con cajas viejas. Sueña viajar a "
-            "Marte, pero al despegar desde su patio llega al planeta de los "
-            "gatos parlantes, donde aprende paciencia, amistad y trabajo en "
-            "equipo."
+            "Diego y sus hermanos construyen una casa de árbol en el patio con "
+            "tablas recicladas. Durante el proyecto aprenden a escucharse, compartir "
+            "herramientas y crear un refugio donde la familia se reúne a contar historias."
         ),
         "cover": "Standard Hardcover",
         "wants_voice": "false",
@@ -80,10 +76,9 @@ ORDERS = [
         "email": "valentina@example.com",
         "tags": "qr",
         "notes": (
-            "Valentina visita un museo nocturno y descubre pistas ocultas en "
-            "cuadros antiguos. Con su linterna sigue símbolos hasta una sala "
-            "secreta donde un busto de mármol plantea acertijos y revela "
-            "tesoros familiares."
+            "Valentina ayuda a su madre a organizar las fotos de la familia para un "
+            "álbum. Cada imagen despierta anécdotas de tíos y primos, y la niña comprende "
+            "que cada recuerdo mantiene viva la memoria de quienes los quieren."
         ),
         "cover": "Premium Hardcover",
         "wants_voice": "false",
@@ -98,10 +93,9 @@ ORDERS = [
         "email": "carla@example.com",
         "tags": "voz",
         "notes": (
-            "Carla sueña con el océano y un delfín aparece para guiarla. "
-            "Juntos nadan entre corales y barcos hundidos donde hallan un "
-            "cofre de conchas cantoras. Cada melodía revela historias de "
-            "criaturas marinas."
+            "Carla graba con su hermano mayor un mensaje para la abuela que vive lejos. "
+            "Mientras ensayan canciones y chistes, descubren que su voz compartida puede "
+            "acortar la distancia y reforzar el cariño familiar."
         ),
         "cover": "Standard Hardcover",
         "wants_voice": "true",

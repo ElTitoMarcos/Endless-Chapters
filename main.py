@@ -127,13 +127,19 @@ def pages_for_cover(cover: str) -> int:
 
 def _build_notebook_text(row: dict) -> str:
     """Return the client's story plus notes for custom characters."""
-    lines: list[str] = []
+    lines: list[str] = [
+        "Genera una historia a partir de la siguiente información:",
+    ]
     story = (row.get('story') or '').strip()
     if story:
         lines.append(story)
     names = row.get('character_names') or []
     for name in names:
-        lines.append(f"{name} tiene que ser el de la foto adjunta.")
+        lines.append(f"{name} debe corresponder a la foto adjunta.")
+    if names:
+        lines.append(
+            "Los personajes deben corresponder a las fotos adjuntas."
+        )
     return "\n".join(lines).strip()
 
 def prepare_notebook_text(row: dict) -> None:

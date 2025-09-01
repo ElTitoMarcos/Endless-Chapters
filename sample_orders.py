@@ -20,10 +20,10 @@ def get_sample_orders() -> list[dict]:
             'voice_seed': 'abc123',
             'voice_text': 'Hola, este es tu audiolibro...',
             'story': (
-                'Ana y su gato Ori\u00f3n se internan en un bosque donde '
-                'luci\u00e9rnagas iluminan \u00e1rboles que susurran secretos. '
-                'Siguen un sendero de piedras brillantes y hallan una '
-                'cascada que concede deseos a quienes creen.'
+                'Cada domingo Ana hornea pan con su abuela Rosa. Al amasar '
+                'recuerdan al abuelo pescador, y la casa se llena de '
+                'historias y risas que enseñan a la pequeña la fuerza de la '
+                'familia y el amor que perdura.'
             )
         },
         {
@@ -38,10 +38,10 @@ def get_sample_orders() -> list[dict]:
             'voice_name': 'Carlos',
             'voice_text': 'Este es un mensaje sin QR.',
             'story': (
-                'Mateo recibe el encargo de encender el viejo faro de su '
-                'abuelo ante una tormenta. Con su perro Foco, sube '
-                'escalones gastados, limpia el cristal salado y logra que '
-                'la luz gu\u00ede a los barcos perdidos.'
+                'Mateo organiza una cena sorpresa para el aniversario de '
+                'sus padres. Entre recetas heredadas y fotos antiguas, '
+                'descubre cómo el esfuerzo compartido mantiene unida a la '
+                'familia y honra su historia.'
             ),
             'character_names': ['Mateo']
         },
@@ -55,10 +55,10 @@ def get_sample_orders() -> list[dict]:
             'revisions': 2,
             'tags': ['qr'],
             'story': (
-                'Carla descubre en el \u00e1tico de su abuela un libro '
-                'cubierto de polvo. Al abrirlo, las palabras se elevan como '
-                'chispas y la llevan junto a su mam\u00e1 a mares de nubes '
-                'donde cada decisi\u00f3n cambia la aventura.'
+                'Carla y su mamá pasan la Navidad decorando la casa con '
+                'adornos hechos a mano. Cada esfera trae recuerdos de '
+                'viajes y canciones, y juntas comprenden que la verdadera '
+                'magia está en compartir tiempo y cariño.'
             ),
             'character_names': ['Carla', 'Mamá']
         }
