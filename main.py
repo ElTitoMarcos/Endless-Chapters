@@ -9,6 +9,7 @@ import uuid
 import zipfile
 import io
 import asyncio
+import webbrowser
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Iterable
@@ -23,6 +24,8 @@ from dotenv import load_dotenv, set_key
 from nicegui import ui, app, Client
 from nicegui.events import UploadEventArguments
 from fastapi.responses import JSONResponse, StreamingResponse
+import pyperclip
+from sample_orders import get_sample_orders
 
 # ---------------------------------------------------------------------------
 # Environment & paths
@@ -125,7 +128,7 @@ def books_for_cover(cover: str) -> int:
 
 
 def pages_for_cover(cover: str) -> int:
-    return 64 if cover.lower() == 'premium hardcover' else 32
+    return 24 if cover.lower() == 'premium hardcover' else 32
 
 
 def generate_prompts(row: dict) -> None:
@@ -396,59 +399,7 @@ def import_block() -> None:
 
 
 async def load_sample_orders(client: Client) -> None:
-    samples = [
-        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 0,
-         'narration': 'Narrated by your loved one', 'revisions': 0,
-         'tags': ['qr', 'voice', 'qr_audio'], 'voice_name': 'Luz',
-         'voice_text': 'Hola, este es tu audiolibro...'},
-        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 1,
-         'narration': 'None', 'revisions': 1,
-         'tags': ['voice'], 'voice_name': 'Carlos', 'voice_text': 'Este es un mensaje sin QR.'},
-        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 2,
-         'narration': 'Narrated by your loved one', 'revisions': 2,
-         'tags': ['qr']},
-        {'order': '1004', 'client': 'Diego', 'email': '',
-         'cover': 'Standard Hardcover', 'personalized_characters': 3,
-         'narration': 'None', 'revisions': 3,
-         'tags': ['voice'], 'voice_name': 'Elena', 'voice_text': 'Mensaje para libro sin email'},
-        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 0,
-         'narration': 'Narrated by your loved one', 'revisions': 1,
-         'tags': ['qr_audio', 'voice'], 'voice_name': 'Mario', 'voice_seed': 'abc123',
-         'voice_text': 'Mensaje con voice_seed y qr_audio'},
-        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 2,
-         'narration': 'None', 'revisions': 0,
-         'tags': ['qr', 'voice'], 'voice_text': 'Nombre con caracteres raros'},
-        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 1,
-         'narration': 'Narrated by your loved one', 'revisions': 2,
-         'tags': []},
-        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 0,
-         'narration': 'None', 'revisions': 3,
-         'tags': ['voice'], 'voice_text': 'Este es un texto de prueba largo para comprobar la duración del audio generado. Incluye varias frases y pausas para simular un párrafo completo.'},
-        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com',
-         'cover': 'Premium Hardcover', 'personalized_characters': 3,
-         'narration': 'Narrated by your loved one', 'revisions': 0,
-         'tags': ['qr']},
-        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com',
-         'cover': 'Standard Hardcover', 'personalized_characters': 1,
-         'narration': 'None', 'revisions': 1,
-         'tags': ['qr', 'voice'], 'voice_name': 'Luz', 'voice_text': 'Mensaje final'},
-    ]
-    for s in samples:
-        s.setdefault('voice_name', '')
-        s.setdefault('voice_seed', '')
-        s.setdefault('voice_text', '')
-        s.setdefault('personalized_characters', 0)
-        s.setdefault('narration', 'None')
-        s.setdefault('revisions', 0)
-        s['id'] = str(uuid.uuid4())
-        s['created'] = str(datetime.now().date())
+    samples = get_sample_orders()
     await asyncio.gather(*(asyncio.to_thread(generate_prompts, s) for s in samples))
     ORDERS.extend(samples)
     refresh_table()
@@ -477,13 +428,9 @@ def render_downloads() -> None:
 async def open_storybook(row: dict, client: Client) -> None:
     try:
         prompts = row.get('prompts') or []
-        with client:
-            for p in prompts:
-                script = (
-                    f"navigator.clipboard.writeText({json.dumps(p)});"
-                    "window.open('https://gemini.google.com/gem/storybook', '_blank');"
-                )
-                await ui.run_javascript(script)
+        if prompts:
+            pyperclip.copy(prompts[0])
+            webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         audio_path = synth_voice(row, audio_dir)
         work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
