@@ -7,5 +7,5 @@ call .\.venv\Scripts\activate
 pip install -r requirements.txt
 set ECS_HOST=127.0.0.1
 set ECS_PORT=8080
-python main.py
+python desktop_app.py
 pause
