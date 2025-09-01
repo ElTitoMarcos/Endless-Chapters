@@ -8,6 +8,7 @@ import tempfile
 import uuid
 import zipfile
 import io
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Iterable
@@ -17,7 +18,7 @@ import qrcode
 import requests
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import LETTER
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 
 from nicegui import ui, app
 from nicegui.events import UploadEventArguments
@@ -63,7 +64,7 @@ def simple_pdf(texts: list[str], out_pdf: Path, qr_png: Path | None = None) -> N
     for i, text in enumerate(texts):
         c.setFont('Helvetica', 14)
         c.drawString(72, 720, text)
-        if i == 0 and qr_png and qr_png.exists():
+        if i == len(texts) - 1 and qr_png and qr_png.exists():
             c.drawImage(str(qr_png), 450, 50, width=120, height=120,
                         preserveAspectRatio=True, mask='auto')
         c.showPage()
@@ -76,12 +77,15 @@ def zip_dir(src: Path, zip_path: Path) -> None:
             if p.is_file():
                 z.write(p, p.relative_to(src))
 
-def zip_dir(src: Path, zip_path: Path) -> None:
-    ensure_dir(zip_path.parent)
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
-        for p in src.rglob('*'):
-            if p.is_file():
-                z.write(p, p.relative_to(src))
+
+def verify_openai_key(key: str) -> bool:
+    try:
+        r = requests.get('https://api.openai.com/v1/models',
+                         headers={'Authorization': f'Bearer {key}'}, timeout=10)
+        return r.status_code == 200
+    except Exception as e:
+        logger.error('verify key failed: %s', e)
+        return False
 
 # ---------------------------------------------------------------------------
 # Data model in memory
@@ -99,7 +103,6 @@ COL_ALIASES = {
     'client': ['client', 'cliente', 'name'],
     'email': ['email', 'correo'],
     'cover': ['cover'],
-    'pages': ['pages', 'paginas'],
     'tags': ['tags'],
     'personalized_characters': ['personalized_characters', 'characters'],
     'narration': ['narration'],
@@ -116,6 +119,51 @@ def _val(data: dict, names: Iterable[str]) -> Any:
         if n in data and pd.notna(data[n]):
             return data[n]
     return None
+
+
+def books_for_cover(cover: str) -> int:
+    return 2 if cover.lower() == 'premium hardcover' else 1
+
+
+def generate_prompts(row: dict) -> None:
+    """Build Gemini Storybook prompts based on order specs."""
+    specs = [f"Crea un cuento para {row['client']}"]
+    pcs = row.get('personalized_characters')
+    if pcs:
+        specs.append(f"incluye {pcs} personajes personalizados")
+    narration = row.get('narration')
+    if narration and narration.lower() != 'none':
+        specs.append(f"narración: {narration}")
+    base = '. '.join(specs) + '. No menciones número de páginas ni tipo de cubierta.'
+    prompts: list[str] = []
+    for i in range(books_for_cover(row.get('cover', ''))):
+        extra = " Continúa la historia del libro anterior." if i else ""
+        prompt_input = base + extra
+        if OPENAI_API_KEY:
+            try:
+                payload = {
+                    'model': 'gpt-4o',
+                    'messages': [
+                        {'role': 'system', 'content': 'Eres un asistente que genera prompts para Gemini Storybook.'},
+                        {'role': 'user', 'content': prompt_input},
+                    ],
+                }
+                r = requests.post('https://api.openai.com/v1/chat/completions',
+                                   headers={'Authorization': f'Bearer {OPENAI_API_KEY}'},
+                                   json=payload, timeout=20)
+                if r.status_code == 200:
+                    content = r.json()['choices'][0]['message']['content'].strip()
+                    prompts.append(content)
+                else:
+                    logger.warning('OpenAI prompt error %s: %s', r.status_code, r.text)
+                    prompts.append(prompt_input)
+            except Exception as e:
+                logger.error('OpenAI prompt failed: %s', e)
+                prompts.append(prompt_input)
+        else:
+            prompts.append(prompt_input)
+    row['prompts'] = prompts
+    row['status'] = 'Prompt ready'
 
 
 def parse_orders(temp_path: Path) -> list[dict]:
@@ -136,8 +184,6 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'client': str(_val(data, COL_ALIASES['client']) or ''),
             'email': str(_val(data, COL_ALIASES['email']) or ''),
             'cover': str(_val(data, COL_ALIASES['cover']) or ''),
-            'pages': int(_val(data, COL_ALIASES['pages']) or 0),
-            'status': 'Pending to prompt',
             'tags': [t.strip() for t in str(_val(data, COL_ALIASES['tags']) or '').split(',') if t.strip()],
             'personalized_characters': int(_val(data, COL_ALIASES['personalized_characters']) or 0),
             'narration': str(_val(data, COL_ALIASES['narration']) or ''),
@@ -261,6 +307,8 @@ def generate_order_bundle(row: dict, base_out: Path) -> tuple[Path, Path]:
 def api_import(temp_path: str):
     try:
         rows = parse_orders(Path(temp_path))
+        for r in rows:
+            generate_prompts(r)
         ORDERS.extend(rows)
         return {'rows': rows}
     except Exception as e:
@@ -271,13 +319,13 @@ def api_export_csv() -> StreamingResponse:
     def gen():
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(['id', 'created', 'order', 'client', 'email', 'cover', 'pages',
+        writer.writerow(['created', 'order', 'client', 'email', 'cover',
                          'personalized_characters', 'narration', 'revisions',
                          'status', 'tags', 'voice_name', 'voice_seed', 'voice_text'])
         for r in ORDERS:
             writer.writerow([
-                r['id'], r['created'], r['order'], r['client'], r['email'], r['cover'],
-                r['pages'], r['personalized_characters'], r['narration'],
+                r['created'], r['order'], r['client'], r['email'], r['cover'],
+                r['personalized_characters'], r['narration'],
                 r['revisions'], r['status'], ','.join(r['tags']),
                 r['voice_name'], r['voice_seed'], r['voice_text'],
             ])
@@ -289,8 +337,8 @@ def api_export_csv() -> StreamingResponse:
 # ---------------------------------------------------------------------------
 # UI
 
-    table: ui.table
-    download_container: ui.column
+table: ui.table
+download_container: ui.column
 
 
 def refresh_table() -> None:
@@ -311,53 +359,79 @@ async def handle_upload(e: UploadEventArguments) -> None:
     ui.notify(f"{len(data['rows'])} filas importadas")
     refresh_table()
 
+def api_key_block() -> None:
+    with ui.card().classes('p-4'):
+        ui.label('Configurar OpenAI')
+        key_input = ui.input('API key', password=True, value=OPENAI_API_KEY or '').props('clearable')
+        status = ui.label('')
+
+        def verify() -> None:
+            global OPENAI_API_KEY
+            key = key_input.value.strip()
+            if not key:
+                ui.notify('Introduce una clave', type='warning')
+                return
+            if verify_openai_key(key):
+                OPENAI_API_KEY = key
+                os.environ['OPENAI_API_KEY'] = key
+                set_key(str(BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
+                status.text = 'Clave verificada'
+                ui.notify('Clave verificada')
+            else:
+                status.text = 'Clave inválida'
+                ui.notify('Clave inválida', type='negative')
+
+        ui.button('Verificar', on_click=verify)
+
+
 def import_block() -> None:
+    api_key_block()
     with ui.card().classes('p-4'):
         ui.label('Importar pedidos (CSV/Excel)')
         ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
 
 
-def load_sample_orders() -> None:
+async def load_sample_orders() -> None:
     samples = [
-        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com', 'pages': 12,
+        {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
          'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr', 'voice', 'qr_audio'], 'voice_name': 'Luz',
          'voice_text': 'Hola, este es tu audiolibro...'},
-        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com', 'pages': 20,
+        {'order': '1002', 'client': 'Ben', 'email': 'ben@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 1,
          'narration': 'None', 'revisions': 1,
          'tags': ['voice'], 'voice_name': 'Carlos', 'voice_text': 'Este es un mensaje sin QR.'},
-        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com', 'pages': 32,
+        {'order': '1003', 'client': 'Carla', 'email': 'carla@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 2,
          'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': ['qr']},
-        {'order': '1004', 'client': 'Diego', 'email': '', 'pages': 40,
+        {'order': '1004', 'client': 'Diego', 'email': '',
          'cover': 'Standard Hardcover', 'personalized_characters': 3,
          'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_name': 'Elena', 'voice_text': 'Mensaje para libro sin email'},
-        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com', 'pages': 64,
+        {'order': '1005', 'client': 'Eva', 'email': 'eva@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
          'narration': 'Narrated by your loved one', 'revisions': 1,
          'tags': ['qr_audio', 'voice'], 'voice_name': 'Mario', 'voice_seed': 'abc123',
          'voice_text': 'Mensaje con voice_seed y qr_audio'},
-        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com', 'pages': 20,
+        {'order': '1006', 'client': 'José Ñandú', 'email': 'jose@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 2,
          'narration': 'None', 'revisions': 0,
          'tags': ['qr', 'voice'], 'voice_text': 'Nombre con caracteres raros'},
-        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com', 'pages': 12,
+        {'order': '1007', 'client': 'Luisa', 'email': 'luisa@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 1,
          'narration': 'Narrated by your loved one', 'revisions': 2,
          'tags': []},
-        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com', 'pages': 32,
+        {'order': '1008', 'client': 'Miguel', 'email': 'miguel@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 0,
          'narration': 'None', 'revisions': 3,
          'tags': ['voice'], 'voice_text': 'Este es un texto de prueba largo para comprobar la duración del audio generado. Incluye varias frases y pausas para simular un párrafo completo.'},
-        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com', 'pages': 40,
+        {'order': '1009', 'client': 'Nora', 'email': 'nora@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 3,
          'narration': 'Narrated by your loved one', 'revisions': 0,
          'tags': ['qr']},
-        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com', 'pages': 64,
+        {'order': '1010', 'client': 'Oscar', 'email': 'oscar@example.com',
          'cover': 'Standard Hardcover', 'personalized_characters': 1,
          'narration': 'None', 'revisions': 1,
          'tags': ['qr', 'voice'], 'voice_name': 'Luz', 'voice_text': 'Mensaje final'},
@@ -371,9 +445,10 @@ def load_sample_orders() -> None:
         s.setdefault('revisions', 0)
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
-        s['status'] = 'Pending to prompt'
+    await asyncio.gather(*(asyncio.to_thread(generate_prompts, s) for s in samples))
     ORDERS.extend(samples)
     refresh_table()
+    ui.notify('Pedidos de prueba cargados')
 
 
 def render_downloads() -> None:
@@ -394,32 +469,12 @@ def render_downloads() -> None:
                         ui.audio(f'/downloads/{folder}/audio/voice.mp3').props('controls')
 
 
-async def generate_prompt(row: dict) -> None:
-    try:
-        if OPENAI_API_KEY:
-            payload = {
-                'model': 'gpt-4o-mini',
-                'messages': [{'role': 'user', 'content': f"Genera un prompt breve para un cuento de {row['pages']} páginas para {row['client']}."}],
-            }
-            headers = {'Authorization': f'Bearer {OPENAI_API_KEY}'}
-            r = requests.post('https://api.openai.com/v1/chat/completions', headers=headers, json=payload)
-            r.raise_for_status()
-            data = r.json()
-            row['prompt'] = data['choices'][0]['message']['content']
-        else:
-            row['prompt'] = f"Historia para {row['client']} de {row['pages']} páginas."
-        row['status'] = 'Pending to upload file'
-        refresh_table()
-        ui.notify('Prompt generado')
-    except Exception as e:
-        ui.notify(f'Error generando prompt: {e}', type='negative')
-
-
 async def open_storybook(row: dict) -> None:
     try:
-        ui.open('https://gemini.google.com/gem/storybook')
-        if row.get('prompt'):
-            await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(row['prompt'])});")
+        prompts = row.get('prompts') or []
+        for p in prompts:
+            ui.open('https://gemini.google.com/gem/storybook')
+            await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(p)});")
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         audio_path = synth_voice(row, audio_dir)
         work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
@@ -439,12 +494,10 @@ def mark_done(row: dict) -> None:
 def main_page() -> None:
     global table, download_container
     columns = [
-        {'name': 'id', 'label': 'ID', 'field': 'id', 'sortable': False},
         {'name': 'order', 'label': 'Pedido', 'field': 'order'},
         {'name': 'client', 'label': 'Cliente', 'field': 'client'},
         {'name': 'email', 'label': 'Email', 'field': 'email'},
         {'name': 'cover', 'label': 'Cubierta', 'field': 'cover'},
-        {'name': 'pages', 'label': 'Páginas', 'field': 'pages'},
         {'name': 'personalized_characters', 'label': 'Personajes', 'field': 'personalized_characters'},
         {'name': 'narration', 'label': 'Narración', 'field': 'narration'},
         {'name': 'revisions', 'label': 'Revisiones', 'field': 'revisions'},
@@ -463,11 +516,8 @@ def main_page() -> None:
     <q-td :props="props">
       <div class='row items-center q-gutter-sm'>
         <span>{{ props.row.status }}</span>
-        <q-btn v-if="props.row.status === 'Pending to prompt'"
-               label="Generar prompt"
-               @click="() => emit('generate_prompt', props.row.id)"/>
-        <q-btn v-else-if="props.row.status === 'Pending to upload file'"
-               label="Abrir Storybook"
+        <q-btn v-if="props.row.status === 'Prompt ready'"
+               label="Generar Libro"
                @click="() => emit('open_storybook', props.row.id)"/>
         <q-btn v-else-if="props.row.status === 'Pending yo revise PDF'"
                label="Marcar DONE"
@@ -481,8 +531,7 @@ def main_page() -> None:
         rid = e.args if isinstance(e.args, str) else e.args[0]
         return next(r for r in ORDERS if r['id'] == rid)
 
-    table.on('generate_prompt', lambda e: ui.run_async(generate_prompt(_row_from_event(e))))
-    table.on('open_storybook', lambda e: ui.run_async(open_storybook(_row_from_event(e))))
+    table.on('open_storybook', lambda e: asyncio.create_task(open_storybook(_row_from_event(e))))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()
     download_container = ui.column()
