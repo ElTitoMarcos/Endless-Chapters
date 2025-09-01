@@ -38,6 +38,8 @@ Al arrancar se abrirá una ventana vacía; pulsa "Cargar pedidos de prueba" para
 
 Ejecuta `python generate_sample_orders.py` para crear `sample_orders.csv` con ejemplos que cubren combinaciones de etiquetas `voz` y `qr` y distintos tipos de cubierta. Importa este archivo desde la interfaz para verificar que todo funcione correctamente.
 
+Las historias de ejemplo rondan los 600 caracteres y se centran en escenas familiares detalladas para ofrecer un mejor contexto al generar resúmenes.
+
 El botón **Generar Storybook** abre la página de Gemini Storybook sin descargar archivos. Aparece después de copiar en NotebookLM el resumen generado allí.
 
 ### Flujo de estados
