@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import os
 import webbrowser
-from tkinter import Tk, Frame, Button, messagebox, simpledialog
+from tkinter import Tk, Frame, Button, messagebox
 from tkinter import ttk
 
 import pyperclip
 
-import main
-from main import generate_prompts
-from dotenv import set_key
+from main import prepare_notebook_text
 from sample_orders import get_sample_orders
 
 ORDERS: list[dict] = []
 ROW_BUTTONS: dict[str, list[Button]] = {}
-api_button: Button | None = None
+
 
 
 def load_samples() -> None:
@@ -23,31 +20,12 @@ def load_samples() -> None:
     samples = get_sample_orders()
     for s in samples:
         try:
-            generate_prompts(s)
+            prepare_notebook_text(s)
             ORDERS.append(s)
         except Exception as e:
-            messagebox.showerror('Error', f'No se pudieron generar prompts: {e}')
+            messagebox.showerror('Error', f'No se pudieron preparar los datos: {e}')
             break
     refresh_table()
-
-
-def prompt_api_key() -> None:
-    """Ask the user for the OpenAI API key if not already configured."""
-    global api_button
-    if main.OPENAI_API_KEY and main.OPENAI_API_KEY != 'tu_openai':
-        if api_button:
-            api_button.destroy()
-            api_button = None
-        return
-    key = simpledialog.askstring('OpenAI API Key', 'Introduce tu clave de OpenAI:', show='*')
-    if key:
-        os.environ['OPENAI_API_KEY'] = key
-        main.OPENAI_API_KEY = key
-        set_key(str(main.BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
-        if api_button:
-            api_button.destroy()
-            api_button = None
-
 
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
@@ -157,10 +135,6 @@ tree.pack(fill='both', expand=True)
 # Buttons
 btns = Frame(root)
 btns.pack(pady=5)
-if not (main.OPENAI_API_KEY and main.OPENAI_API_KEY != 'tu_openai'):
-    api_button = Button(btns, text='Configurar API Key', command=prompt_api_key)
-    api_button.pack(side='left', padx=5)
-    prompt_api_key()
 Button(btns, text='Cargar pedidos de prueba', command=load_samples).pack(side='left', padx=5)
 
 root.mainloop()

@@ -19,7 +19,7 @@ import qrcode
 import requests
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import LETTER
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
 
 from nicegui import ui, app, Client
 from nicegui.events import UploadEventArguments
@@ -81,15 +81,6 @@ def zip_dir(src: Path, zip_path: Path) -> None:
                 z.write(p, p.relative_to(src))
 
 
-def verify_openai_key(key: str) -> bool:
-    try:
-        r = requests.get('https://api.openai.com/v1/models',
-                         headers={'Authorization': f'Bearer {key}'}, timeout=10)
-        return r.status_code == 200
-    except Exception as e:
-        logger.error('verify key failed: %s', e)
-        return False
-
 # ---------------------------------------------------------------------------
 # Data model in memory
 
@@ -134,54 +125,35 @@ def pages_for_cover(cover: str) -> int:
     return 24 if cover.lower() == 'premium hardcover' else 32
 
 
-def _gpt_notebook_text(row: dict) -> str:
-    pieces: list[str] = []
+def _build_notebook_text(row: dict) -> str:
+    """Create a structured text snippet with the order information."""
+    lines: list[str] = []
+    order = row.get('order')
+    client = row.get('client')
+    if order or client:
+        lines.append(f"Pedido {order} - {client}")
+    cover = row.get('cover')
+    if cover:
+        lines.append(f"Cubierta: {cover}")
+    lines.append(f"Personajes personalizados: {row.get('personalized_characters', 0)}")
+    lines.append(f"Revisiones: {row.get('revisions', 0)}")
+    tags = row.get('tags') or []
+    if tags:
+        lines.append("Etiquetas: " + ', '.join(tags))
     story = row.get('story') or ''
     if story:
-        pieces.append(f"Historia: {story}")
+        lines.append(f"Historia: {story}")
     names = row.get('character_names') or []
     if names:
-        pieces.append("Personajes: " + ', '.join(names))
+        lines.append("Personajes: " + ', '.join(names))
     photos = row.get('photos') or []
     if photos:
-        pieces.append("Fotos de referencia: " + ', '.join(photos))
-    base_text = '\n'.join(pieces)
-    if not OPENAI_API_KEY:
-        return base_text
-    try:
-        prompt = (
-            "Extrae la información esencial del siguiente pedido y devuelve un resumen breve en español:\n"
-            f"{base_text}"
-        )
-        r = requests.post(
-            'https://api.openai.com/v1/chat/completions',
-            headers={
-                'Authorization': f'Bearer {OPENAI_API_KEY}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': 'gpt-4o',
-                'messages': [
-                    {
-                        'role': 'system',
-                        'content': 'Eres un asistente que resume pedidos para un cuento infantil.',
-                    },
-                    {'role': 'user', 'content': prompt},
-                ],
-            },
-            timeout=30,
-        )
-        data = r.json()
-        return data['choices'][0]['message']['content'].strip()
-    except Exception as e:
-        logger.error('gpt extraction failed: %s', e)
-        return base_text
+        lines.append("Fotos de referencia: " + ', '.join(photos))
+    return "\n".join(lines)
 
-
-def generate_prompts(row: dict) -> None:
-    """Prepare NotebookLM source text and reset prompts."""
-    row['notebook_text'] = _gpt_notebook_text(row)
-    row['prompts'] = []
+def prepare_notebook_text(row: dict) -> None:
+    """Prepare NotebookLM source text without external APIs."""
+    row['notebook_text'] = _build_notebook_text(row)
     row['status'] = 'Pending to NotebookLM'
 
 
@@ -331,7 +303,7 @@ def api_import(temp_path: str):
     try:
         rows = parse_orders(Path(temp_path))
         for r in rows:
-            generate_prompts(r)
+            prepare_notebook_text(r)
         ORDERS.extend(rows)
         return {'rows': rows}
     except Exception as e:
@@ -382,33 +354,8 @@ async def handle_upload(e: UploadEventArguments) -> None:
     ui.notify(f"{len(data['rows'])} filas importadas")
     refresh_table()
 
-def api_key_block() -> None:
-    with ui.card().classes('p-4'):
-        ui.label('Configurar OpenAI')
-        key_input = ui.input('API key', password=True, value=OPENAI_API_KEY or '').props('clearable')
-        status = ui.label('')
-
-        def verify() -> None:
-            global OPENAI_API_KEY
-            key = key_input.value.strip()
-            if not key:
-                ui.notify('Introduce una clave', type='warning')
-                return
-            if verify_openai_key(key):
-                OPENAI_API_KEY = key
-                os.environ['OPENAI_API_KEY'] = key
-                set_key(str(BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
-                status.text = 'Clave verificada'
-                ui.notify('Clave verificada')
-            else:
-                status.text = 'Clave inválida'
-                ui.notify('Clave inválida', type='negative')
-
-        ui.button('Verificar', on_click=verify)
-
 
 def import_block() -> None:
-    api_key_block()
     with ui.card().classes('p-4'):
         ui.label('Importar pedidos (CSV/Excel)')
         ui.upload(on_upload=handle_upload, auto_upload=True).props('accept=.csv,.xlsx,.xls')
@@ -416,7 +363,7 @@ def import_block() -> None:
 
 async def load_sample_orders(client: Client) -> None:
     samples = get_sample_orders()
-    await asyncio.gather(*(asyncio.to_thread(generate_prompts, s) for s in samples))
+    await asyncio.gather(*(asyncio.to_thread(prepare_notebook_text, s) for s in samples))
     ORDERS.extend(samples)
     refresh_table()
     with client:
@@ -443,10 +390,7 @@ def render_downloads() -> None:
 
 async def open_storybook(row: dict, client: Client) -> None:
     try:
-        prompts = row.get('prompts') or []
-        if prompts:
-            pyperclip.copy(prompts[0])
-            webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
+        webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         audio_path = synth_voice(row, audio_dir)
         work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
@@ -474,20 +418,6 @@ async def open_notebooklm(row: dict, client: Client) -> None:
     except Exception as e:
         with client:
             ui.notify(f'Error abriendo NotebookLM: {e}', type='negative')
-
-
-async def save_prompts(row: dict, client: Client) -> None:
-    try:
-        text = pyperclip.paste()
-        prompts = [p.strip() for p in text.split('\n---\n') if p.strip()]
-        row['prompts'] = prompts
-        row['status'] = 'ready to generate Book'
-        with client:
-            refresh_table()
-            ui.notify('Prompts guardados')
-    except Exception as e:
-        with client:
-            ui.notify(f'Error guardando prompts: {e}', type='negative')
 
 
 def mark_done(row: dict) -> None:
@@ -523,10 +453,7 @@ def main_page() -> None:
                label="NotebookLM"
                @click="() => emit('open_notebooklm', props.row.id)"/>
         <q-btn v-else-if="props.row.status === 'Pending to Storybook'"
-               label="Guardar Prompts"
-               @click="() => emit('save_prompts', props.row.id)"/>
-        <q-btn v-else-if="props.row.status === 'ready to generate Book'"
-               label="Generar Libro"
+               label="Generar Storybook"
                @click="() => emit('open_storybook', props.row.id)"/>
         <q-btn v-else-if="props.row.status === 'Pending yo revise PDF'"
                label="Marcar DONE"
@@ -541,7 +468,6 @@ def main_page() -> None:
         return next(r for r in ORDERS if r['id'] == rid)
 
     table.on('open_notebooklm', lambda e: asyncio.create_task(open_notebooklm(_row_from_event(e), e.client)))
-    table.on('save_prompts', lambda e: asyncio.create_task(save_prompts(_row_from_event(e), e.client)))
     table.on('open_storybook', lambda e: asyncio.create_task(open_storybook(_row_from_event(e), e.client)))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()
