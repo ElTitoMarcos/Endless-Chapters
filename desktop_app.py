@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import os
 import threading
 import webbrowser
-from tkinter import Tk, Frame, Button, messagebox
+from tkinter import Tk, Frame, Button, messagebox, simpledialog
 from tkinter import ttk
 
 import pyperclip
+
+import main
 from main import generate_prompts, synth_voice, generate_order_bundle, DOWNLOAD_DIR
+from dotenv import set_key
 from sample_orders import get_sample_orders
 
 ORDERS: list[dict] = []
@@ -17,10 +21,24 @@ def load_samples() -> None:
     ORDERS.clear()
     samples = get_sample_orders()
     for s in samples:
-        generate_prompts(s)
-        ORDERS.append(s)
+        try:
+            generate_prompts(s)
+            ORDERS.append(s)
+        except Exception as e:
+            messagebox.showerror('Error', f'No se pudieron generar prompts: {e}')
+            break
     refresh_table()
 
+
+def prompt_api_key() -> None:
+    """Ask the user for the OpenAI API key if not already configured."""
+    if main.OPENAI_API_KEY and main.OPENAI_API_KEY != 'tu_openai':
+        return
+    key = simpledialog.askstring('OpenAI API Key', 'Introduce tu clave de OpenAI:', show='*')
+    if key:
+        os.environ['OPENAI_API_KEY'] = key
+        main.OPENAI_API_KEY = key
+        set_key(str(main.BASE_DIR / '.env'), 'OPENAI_API_KEY', key)
 
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
@@ -64,9 +82,11 @@ tree.pack(fill='both', expand=True)
 # Buttons
 btns = Frame(root)
 btns.pack(pady=5)
+Button(btns, text='Configurar API Key', command=prompt_api_key).pack(side='left', padx=5)
 Button(btns, text='Cargar pedidos de prueba', command=load_samples).pack(side='left', padx=5)
 Button(btns, text='Generar Libro', command=generate_selected).pack(side='left', padx=5)
 
-# Load initial sample orders
+# Prompt for key and load initial sample orders
+prompt_api_key()
 load_samples()
 root.mainloop()
