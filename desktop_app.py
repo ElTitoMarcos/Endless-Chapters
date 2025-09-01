@@ -6,7 +6,6 @@ from tkinter import Tk, Frame, Button, messagebox
 from tkinter import ttk
 
 import pyperclip
-
 from main import generate_prompts, synth_voice, generate_order_bundle, DOWNLOAD_DIR
 from sample_orders import get_sample_orders
 
@@ -70,5 +69,4 @@ Button(btns, text='Generar Libro', command=generate_selected).pack(side='left', 
 
 # Load initial sample orders
 load_samples()
-
 root.mainloop()
