@@ -560,4 +560,3 @@ if __name__ in {'__main__', '__mp_main__'}:
     except Exception as e:  # pragma: no cover - fallback for missing native deps
         logger.warning('Native mode unavailable: %s. Using browser mode.', e)
         ui.run(port=8080, reload=False)
-
