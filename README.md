@@ -3,7 +3,7 @@
 
 App local con interfaz para:
 - Importar pedidos desde Excel/CSV
-- Generar texto estructurado por pedido para NotebookLM
+- Copiar la historia del pedido para NotebookLM (con notas de personajes personalizados)
 - Subir texto (JSON o TXT) y audio (opcional)
 - Producir PDF listo para imprenta (portada color con logo, interior en grises, QR a audio)
 - Clonar voz a partir de un archivo de audio y generar locuciones del texto

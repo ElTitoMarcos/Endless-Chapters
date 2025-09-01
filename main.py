@@ -126,33 +126,18 @@ def pages_for_cover(cover: str) -> int:
 
 
 def _build_notebook_text(row: dict) -> str:
-    """Create a structured text snippet with the order information."""
+    """Return the client's story plus notes for custom characters."""
     lines: list[str] = []
-    order = row.get('order')
-    client = row.get('client')
-    if order or client:
-        lines.append(f"Pedido {order} - {client}")
-    cover = row.get('cover')
-    if cover:
-        lines.append(f"Cubierta: {cover}")
-    lines.append(f"Personajes personalizados: {row.get('personalized_characters', 0)}")
-    lines.append(f"Revisiones: {row.get('revisions', 0)}")
-    tags = row.get('tags') or []
-    if tags:
-        lines.append("Etiquetas: " + ', '.join(tags))
-    story = row.get('story') or ''
+    story = (row.get('story') or '').strip()
     if story:
-        lines.append(f"Historia: {story}")
+        lines.append(story)
     names = row.get('character_names') or []
-    if names:
-        lines.append("Personajes: " + ', '.join(names))
-    photos = row.get('photos') or []
-    if photos:
-        lines.append("Fotos de referencia: " + ', '.join(photos))
-    return "\n".join(lines)
+    for name in names:
+        lines.append(f"{name} tiene que ser el de la foto adjunta.")
+    return "\n".join(lines).strip()
 
 def prepare_notebook_text(row: dict) -> None:
-    """Prepare NotebookLM source text without external APIs."""
+    """Prepare NotebookLM text using the client's story."""
     row['notebook_text'] = _build_notebook_text(row)
     row['status'] = 'Pending to NotebookLM'
 
