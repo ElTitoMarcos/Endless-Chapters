@@ -134,8 +134,7 @@ def pages_for_cover(cover: str) -> int:
     return 24 if cover.lower() == 'premium hardcover' else 32
 
 
-def generate_prompts(row: dict) -> None:
-    """Prepare NotebookLM source text and reset prompts."""
+def _gpt_notebook_text(row: dict) -> str:
     pieces: list[str] = []
     story = row.get('story') or ''
     if story:
@@ -146,7 +145,42 @@ def generate_prompts(row: dict) -> None:
     photos = row.get('photos') or []
     if photos:
         pieces.append("Fotos de referencia: " + ', '.join(photos))
-    row['notebook_text'] = '\n'.join(pieces)
+    base_text = '\n'.join(pieces)
+    if not OPENAI_API_KEY:
+        return base_text
+    try:
+        prompt = (
+            "Extrae la información esencial del siguiente pedido y devuelve un resumen breve en español:\n"
+            f"{base_text}"
+        )
+        r = requests.post(
+            'https://api.openai.com/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {OPENAI_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'gpt-4o',
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': 'Eres un asistente que resume pedidos para un cuento infantil.',
+                    },
+                    {'role': 'user', 'content': prompt},
+                ],
+            },
+            timeout=30,
+        )
+        data = r.json()
+        return data['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        logger.error('gpt extraction failed: %s', e)
+        return base_text
+
+
+def generate_prompts(row: dict) -> None:
+    """Prepare NotebookLM source text and reset prompts."""
+    row['notebook_text'] = _gpt_notebook_text(row)
     row['prompts'] = []
     row['status'] = 'Pending to NotebookLM'
 
