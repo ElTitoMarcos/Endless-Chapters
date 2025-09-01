@@ -5,6 +5,7 @@ import webbrowser
 from tkinter import Tk, Frame, Button, messagebox
 from tkinter import ttk
 
+import pyperclip
 from main import generate_prompts, synth_voice, generate_order_bundle, DOWNLOAD_DIR
 from sample_orders import get_sample_orders
 
@@ -37,8 +38,7 @@ def generate_selected() -> None:
     def task() -> None:
         # copy first prompt and open Storybook
         if row.get('prompts'):
-            root.clipboard_clear()
-            root.clipboard_append(row['prompts'][0])
+            pyperclip.copy(row['prompts'][0])
             webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         synth_voice(row, audio_dir)
@@ -67,4 +67,6 @@ btns.pack(pady=5)
 Button(btns, text='Cargar pedidos de prueba', command=load_samples).pack(side='left', padx=5)
 Button(btns, text='Generar Libro', command=generate_selected).pack(side='left', padx=5)
 
+# Load initial sample orders
+load_samples()
 root.mainloop()

@@ -19,9 +19,9 @@ App local con interfaz para:
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python main.py
+python desktop_app.py
 ```
-Abrirá el navegador en http://127.0.0.1:8080
+Se abrirá una ventana de escritorio con los pedidos de prueba.
 
 > Nota: la clonación de voz con muestras requiere la librería opcional `TTS`, disponible solo para versiones de Python anteriores a 3.12. Si no está instalada, la aplicación usará `pyttsx3` con una voz genérica.
 
