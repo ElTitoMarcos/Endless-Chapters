@@ -10,6 +10,7 @@ import zipfile
 import io
 import asyncio
 import webbrowser
+import shutil
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Iterable
@@ -26,6 +27,7 @@ from nicegui.events import UploadEventArguments
 from fastapi.responses import JSONResponse, StreamingResponse
 import pyperclip
 from sample_orders import get_sample_orders
+from postprocess import postprocess_storybooks
 
 # ---------------------------------------------------------------------------
 # Environment & paths
@@ -247,7 +249,7 @@ def synth_voice(row: dict, out_dir: Path) -> Path | None:
 # Bundle generation
 
 
-def generate_order_bundle(row: dict, base_out: Path) -> tuple[Path, Path]:
+def generate_order_bundle(row: dict, base_out: Path, storybook_pdf: Path | None = None) -> tuple[Path, Path]:
     work_dir = ensure_dir(base_out / f"order_{row['order']}_{row['id']}")
     docs_dir = ensure_dir(work_dir / 'docs')
     qr_dir = work_dir / 'qr'
@@ -267,11 +269,14 @@ def generate_order_bundle(row: dict, base_out: Path) -> tuple[Path, Path]:
         make_qr(qr_url, qr_png)
 
     book_pdf = docs_dir / 'book.pdf'
-    texts = [
-        f"Cover {row['order']} - {row['client']}",
-        f"Interior {row['order']} - {row['client']}",
-    ]
-    simple_pdf(texts, book_pdf, qr_png)
+    if storybook_pdf and storybook_pdf.exists():
+        shutil.copy(storybook_pdf, book_pdf)
+    else:
+        texts = [
+            f"Cover {row['order']} - {row['client']}",
+            f"Interior {row['order']} - {row['client']}",
+        ]
+        simple_pdf(texts, book_pdf, qr_png)
 
     manifest = dict(row)
     manifest.update({
@@ -385,18 +390,13 @@ def render_downloads() -> None:
 async def open_storybook(row: dict, client: Client) -> None:
     try:
         webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
-        audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
-        audio_path = synth_voice(row, audio_dir)
-        work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
-        row['status'] = 'Pending yo revise PDF'
-        DOWNLOADS.append({'order': row['order'], 'zip': zip_path, 'dir': work_dir, 'audio': audio_path})
+        row['status'] = 'Pending storybook upload'
         with client:
             refresh_table()
-            render_downloads()
-            ui.notify('Libro generado, revisa el PDF')
+            ui.notify('Genera el storybook y súbelo para postproducción')
     except Exception as e:
         with client:
-            ui.notify(f'Error preparando libro: {e}', type='negative')
+            ui.notify(f'Error abriendo Storybook: {e}', type='negative')
 
 
 async def open_notebooklm(row: dict, client: Client) -> None:
@@ -412,6 +412,36 @@ async def open_notebooklm(row: dict, client: Client) -> None:
     except Exception as e:
         with client:
             ui.notify(f'Error abriendo NotebookLM: {e}', type='negative')
+
+
+async def upload_storybook(row: dict, client: Client) -> None:
+    uploaded: list[Path] = []
+    expected = books_for_cover(row.get('cover', ''))
+    dialog = ui.dialog()
+
+    async def _on_upload(e: UploadEventArguments) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        path = temp_dir / e.name
+        path.write_bytes(e.content.read())
+        uploaded.append(path)
+        if len(uploaded) >= expected:
+            final_pdf = temp_dir / 'storybook.pdf'
+            postprocess_storybooks(uploaded, final_pdf, ASSETS_DIR / 'logo nuevo png.png')
+            audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
+            audio_path = synth_voice(row, audio_dir)
+            work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR, final_pdf)
+            row['status'] = 'Pending yo revise PDF'
+            DOWNLOADS.append({'order': row['order'], 'zip': zip_path, 'dir': work_dir, 'audio': audio_path})
+            with client:
+                refresh_table()
+                render_downloads()
+                ui.notify('Postproducción completada, revisa el PDF')
+            dialog.close()
+
+    with dialog, ui.card().classes('p-4'):
+        ui.label('Sube el Storybook en PDF')
+        ui.upload(on_upload=_on_upload, auto_upload=True, multiple=True).props('accept=.pdf')
+    dialog.open()
 
 
 def mark_done(row: dict) -> None:
@@ -449,6 +479,9 @@ def main_page() -> None:
         <q-btn v-else-if="props.row.status === 'Pending to Storybook'"
                label="Generar Storybook"
                @click="() => emit('open_storybook', props.row.id)"/>
+        <q-btn v-else-if="props.row.status === 'Pending storybook upload'"
+               label="Subir Storybook"
+               @click="() => emit('upload_storybook', props.row.id)"/>
         <q-btn v-else-if="props.row.status === 'Pending yo revise PDF'"
                label="Marcar DONE"
                @click="() => emit('mark_done', props.row.id)"/>
@@ -463,6 +496,7 @@ def main_page() -> None:
 
     table.on('open_notebooklm', lambda e: asyncio.create_task(open_notebooklm(_row_from_event(e), e.client)))
     table.on('open_storybook', lambda e: asyncio.create_task(open_storybook(_row_from_event(e), e.client)))
+    table.on('upload_storybook', lambda e: asyncio.create_task(upload_storybook(_row_from_event(e), e.client)))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()
     download_container = ui.column()
