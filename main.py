@@ -130,6 +130,18 @@ def _build_notebook_text(row: dict) -> str:
     lines: list[str] = [
         "Genera una historia a partir de la siguiente información:",
     ]
+    cover = (row.get('cover') or '').lower()
+    photos = row.get('photos') or []
+    if cover == 'premium hardcover':
+        lines.append(
+            "La historia debe dividirse en dos partes muy claras y diferenciadas."
+        )
+        lines.append(
+            "La segunda parte debe ser la continuación de la primera, pero sin mencionarla."
+        )
+        photo_info = "Hay imágenes adjuntas." if photos else "No hay imágenes adjuntas."
+        lines.append(f"Primera parte: {photo_info}")
+        lines.append(f"Segunda parte: {photo_info}")
     story = (row.get('story') or '').strip()
     if story:
         lines.append(story)
