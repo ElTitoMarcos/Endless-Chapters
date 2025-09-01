@@ -139,19 +139,26 @@ def _build_notebook_text(row: dict) -> str:
         lines.append(
             "La segunda parte debe ser la continuación de la primera, pero sin mencionarla."
         )
-        photo_info = "Hay imágenes adjuntas." if photos else "No hay imágenes adjuntas."
-        lines.append(f"Primera parte: {photo_info}")
-        lines.append(f"Segunda parte: {photo_info}")
+        lines.append(
+            'Genera "Parte 1" y "Parte 2", cada una con toda la información necesaria para entenderse de forma independiente.'
+        )
+        if photos:
+            lines.append("Parte 1: Hay imágenes adjuntas.")
+            lines.append("Parte 2: Hay imágenes adjuntas.")
     story = (row.get('story') or '').strip()
     if story:
         lines.append(story)
     names = row.get('character_names') or []
-    for name in names:
-        lines.append(f"{name} debe corresponder a la foto adjunta.")
-    if names:
-        lines.append(
-            "Los personajes deben corresponder a las fotos adjuntas."
-        )
+    if photos:
+        for name in names:
+            lines.append(f"{name} debe corresponder a la foto adjunta.")
+        if names:
+            lines.append(
+                "Los personajes deben corresponder a las fotos adjuntas."
+            )
+    else:
+        for name in names:
+            lines.append(name)
     return "\n".join(lines).strip()
 
 def prepare_notebook_text(row: dict) -> None:
