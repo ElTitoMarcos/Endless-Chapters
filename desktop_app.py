@@ -12,7 +12,6 @@ from sample_orders import get_sample_orders
 ORDERS: list[dict] = []
 ROW_BUTTONS: dict[str, list[Button]] = {}
 
-
 def load_samples() -> None:
     """Load three sample orders and populate the table."""
     ORDERS.clear()
@@ -25,8 +24,7 @@ def load_samples() -> None:
             messagebox.showerror('Error', f'No se pudieron preparar los datos: {e}')
             break
     refresh_table()
-
-
+    
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
     for btns in ROW_BUTTONS.values():
