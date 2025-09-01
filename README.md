@@ -19,15 +19,15 @@ App local con interfaz para:
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python main.py
+python desktop_app.py
 ```
-Abrirá el navegador en http://127.0.0.1:8080
+Al arrancar se solicitará tu clave de OpenAI y se abrirá una ventana vacía; pulsa "Cargar pedidos de prueba" para ver ejemplos.
 
 > Nota: la clonación de voz con muestras requiere la librería opcional `TTS`, disponible solo para versiones de Python anteriores a 3.12. Si no está instalada, la aplicación usará `pyttsx3` con una voz genérica.
 
 ### Clave de API de OpenAI
 
-En la interfaz hay un bloque para introducir y verificar tu clave de OpenAI. Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI. Tras comprobarse se guarda en el archivo `.env`, de modo que no tendrás que volver a introducirla.
+La aplicación pedirá la clave de OpenAI si no está configurada. Puedes volver a cambiarla desde el botón "Configurar API Key". Esta clave se utiliza para generar los prompts de Gemini Storybook con el modelo GPT-4o y para las funciones de voz que requieran OpenAI. Tras introducirla se guarda en el archivo `.env`.
 
 ## Columnas reconocidas en Excel/CSV
 - order, title, email, tags, notes, cover (Premium Hardcover/Standard Hardcover), personalized_characters, narration, revisions, voice_sample
