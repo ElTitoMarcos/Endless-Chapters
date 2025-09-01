@@ -14,7 +14,7 @@ from dotenv import set_key
 from sample_orders import get_sample_orders
 
 ORDERS: list[dict] = []
-
+ROW_BUTTONS: dict[str, Button] = {}
 
 def load_samples() -> None:
     """Load three sample orders and populate the table."""
@@ -42,19 +42,48 @@ def prompt_api_key() -> None:
 
 def refresh_table() -> None:
     tree.delete(*tree.get_children())
+    for btn in ROW_BUTTONS.values():
+        btn.destroy()
+    ROW_BUTTONS.clear()
     for row in ORDERS:
-        tree.insert('', 'end', iid=row['id'], values=(row['order'], row['client'], row.get('status', '')))
+        tree.insert(
+            '',
+            'end',
+            iid=row['id'],
+            values=(
+                row['order'],
+                row['client'],
+                row.get('email', ''),
+                row.get('cover', ''),
+                row.get('personalized_characters', 0),
+                row.get('narration', ''),
+                row.get('revisions', 0),
+                row.get('status', ''),
+                '',
+            ),
+        )
+    root.after(0, _place_buttons)
 
 
-def generate_selected() -> None:
-    sel = tree.selection()
-    if not sel:
-        messagebox.showwarning('Selección', 'Selecciona un pedido')
-        return
-    row = next(r for r in ORDERS if r['id'] == sel[0])
+def _place_buttons() -> None:
+    for row in ORDERS:
+        bbox = tree.bbox(row['id'], column='action')
+        if not bbox:
+            root.after(10, _place_buttons)
+            return
+        btn = Button(
+            tree,
+            text='Generar Libro',
+            command=lambda rid=row['id']: generate_order(rid),
+        )
+        ROW_BUTTONS[row['id']] = btn
+        btn.place(x=bbox[0], y=bbox[1], width=bbox[2], height=bbox[3])
+
+
+def generate_order(row_id: str) -> None:
+    row = next(r for r in ORDERS if r['id'] == row_id)
 
     def task() -> None:
-        # copy first prompt and open Storybook
         if row.get('prompts'):
             pyperclip.copy(row['prompts'][0])
             webbrowser.open('https://gemini.google.com/gem/storybook', new=2)
@@ -71,12 +100,33 @@ def generate_selected() -> None:
 root = Tk()
 root.title('Endless Chapters')
 
-# Table of orders
-columns = ('order', 'client', 'status')
+columns = (
+    'order',
+    'client',
+    'email',
+    'cover',
+    'personalized_characters',
+    'narration',
+    'revisions',
+    'status',
+    'action',
+)
 tree = ttk.Treeview(root, columns=columns, show='headings')
-for col, title in zip(columns, ['Pedido', 'Cliente', 'Estado']):
+headers = [
+    'Pedido',
+    'Cliente',
+    'Email',
+    'Cubierta',
+    'Personajes',
+    'Narración',
+    'Revisiones',
+    'Estado',
+    '',
+]
+widths = [80, 120, 160, 120, 80, 120, 80, 120, 120]
+for col, title, w in zip(columns, headers, widths):
     tree.heading(col, text=title)
-    tree.column(col, width=150)
+    tree.column(col, width=w)
 tree.pack(fill='both', expand=True)
 
 # Buttons
@@ -84,9 +134,6 @@ btns = Frame(root)
 btns.pack(pady=5)
 Button(btns, text='Configurar API Key', command=prompt_api_key).pack(side='left', padx=5)
 Button(btns, text='Cargar pedidos de prueba', command=load_samples).pack(side='left', padx=5)
-Button(btns, text='Generar Libro', command=generate_selected).pack(side='left', padx=5)
-
-# Prompt for key and load initial sample orders
 prompt_api_key()
-load_samples()
+
 root.mainloop()

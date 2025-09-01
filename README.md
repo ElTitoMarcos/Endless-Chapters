@@ -21,7 +21,7 @@ py -m venv .venv
 pip install -r requirements.txt
 python desktop_app.py
 ```
-Al arrancar se solicitará tu clave de OpenAI y luego se abrirá una ventana con los pedidos de prueba.
+Al arrancar se solicitará tu clave de OpenAI y se abrirá una ventana vacía; pulsa "Cargar pedidos de prueba" para ver ejemplos.
 
 > Nota: la clonación de voz con muestras requiere la librería opcional `TTS`, disponible solo para versiones de Python anteriores a 3.12. Si no está instalada, la aplicación usará `pyttsx3` con una voz genérica.
 
