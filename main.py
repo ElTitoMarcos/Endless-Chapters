@@ -8,6 +8,7 @@ import tempfile
 import uuid
 import zipfile
 import io
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Iterable
@@ -118,17 +119,7 @@ def _val(data: dict, names: Iterable[str]) -> Any:
         if n in data and pd.notna(data[n]):
             return data[n]
     return None
-
-
-def pages_for_cover(cover: str) -> int:
-    cover_l = cover.lower()
-    if cover_l == 'standard hardcover':
-        return 12
-    if cover_l == 'premium hardcover':
-        return 24
-    return 0
-
-
+  
 def books_for_cover(cover: str) -> int:
     return 2 if cover.lower() == 'premium hardcover' else 1
 
@@ -396,8 +387,8 @@ def api_key_block() -> None:
 
         ui.button('Verificar', on_click=verify)
 
+async def load_sample_orders() -> None:
 
-def load_sample_orders() -> None:
     samples = [
         {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
@@ -451,8 +442,7 @@ def load_sample_orders() -> None:
         s.setdefault('revisions', 0)
         s['id'] = str(uuid.uuid4())
         s['created'] = str(datetime.now().date())
-        s['pages'] = pages_for_cover(s['cover'])
-        generate_prompts(s)
+        await asyncio.to_thread(generate_prompts, s)
     ORDERS.extend(samples)
     refresh_table()
 
@@ -514,7 +504,9 @@ def main_page() -> None:
         with ui.row():
             ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
-            ui.button('Cargar pedidos de prueba', on_click=load_sample_orders)
+            ui.button('Cargar pedidos de prueba', on_click=lambda: ui.run_async(load_sample_orders()))
+
+    api_key_block()
 
     api_key_block()
 
