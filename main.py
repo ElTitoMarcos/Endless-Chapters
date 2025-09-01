@@ -478,8 +478,8 @@ async def open_storybook(row: dict) -> None:
     try:
         prompts = row.get('prompts') or []
         for p in prompts:
-            ui.open('https://gemini.google.com/gem/storybook')
             await ui.run_javascript(f"navigator.clipboard.writeText({json.dumps(p)});")
+            ui.open('https://gemini.google.com/gem/storybook')
         audio_dir = DOWNLOAD_DIR / f"order_{row['order']}_{row['id']}" / 'audio'
         audio_path = synth_voice(row, audio_dir)
         work_dir, zip_path = generate_order_bundle(row, DOWNLOAD_DIR)
