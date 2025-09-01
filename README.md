@@ -46,7 +46,7 @@ Ejecuta `python generate_sample_orders.py` para crear `sample_orders.csv` con ej
 El botón **Generar Libro** copia el primer prompt en el portapapeles y abre la página de Gemini Storybook sin descargar archivos. Para cubiertas **Premium Hardcover** aparece además un botón **Copiar Prompt 2** con la continuación del cuento (24 páginas en total: 2 libros de 10 páginas más 4 de relleno).
 
 ### Flujo de estados
-Cada pedido avanza por los siguientes estados: "Prompt ready" → "Prompt 1 copiado" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
+Cada pedido avanza por los siguientes estados: "Pending to NotebookLM" → "Pending to Storybook" → "ready to generate Book" → "Prompt 1 copiado" → "DONE". La interfaz muestra un botón de acción para continuar con el siguiente paso según corresponda.
 
 ## Empaquetar en .EXE (Windows)
 ```powershell

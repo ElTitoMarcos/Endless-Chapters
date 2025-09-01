@@ -114,6 +114,9 @@ COL_ALIASES = {
     'voice_seed': ['voice_seed', 'voice_id'],
     'voice_text': ['voice_text', 'text'],
     'voice_sample': ['voice_sample', 'voice_clone', 'voice_file'],
+    'story': ['story', 'title', 'notes'],
+    'character_names': ['character_names', 'characters_names', 'names'],
+    'photos': ['photos', 'photo_urls', 'imagenes'],
 }
 
 
@@ -132,44 +135,20 @@ def pages_for_cover(cover: str) -> int:
 
 
 def generate_prompts(row: dict) -> None:
-    """Build Gemini Storybook prompts based on order specs."""
-    specs = [f"Crea un cuento para {row['client']}"]
-    pcs = row.get('personalized_characters')
-    if pcs:
-        specs.append(f"incluye {pcs} personajes personalizados")
-    narration = row.get('narration')
-    if narration and narration.lower() != 'none':
-        specs.append(f"narración: {narration}")
-    base = '. '.join(specs) + '. No menciones número de páginas ni tipo de cubierta.'
-    prompts: list[str] = []
-    for i in range(books_for_cover(row.get('cover', ''))):
-        extra = " Continúa la historia del libro anterior." if i else ""
-        prompt_input = base + extra
-        if OPENAI_API_KEY:
-            try:
-                payload = {
-                    'model': 'gpt-4o',
-                    'messages': [
-                        {'role': 'system', 'content': 'Eres un asistente que genera prompts para Gemini Storybook.'},
-                        {'role': 'user', 'content': prompt_input},
-                    ],
-                }
-                r = requests.post('https://api.openai.com/v1/chat/completions',
-                                   headers={'Authorization': f'Bearer {OPENAI_API_KEY}'},
-                                   json=payload, timeout=20)
-                if r.status_code == 200:
-                    content = r.json()['choices'][0]['message']['content'].strip()
-                    prompts.append(content)
-                else:
-                    logger.warning('OpenAI prompt error %s: %s', r.status_code, r.text)
-                    prompts.append(prompt_input)
-            except Exception as e:
-                logger.error('OpenAI prompt failed: %s', e)
-                prompts.append(prompt_input)
-        else:
-            prompts.append(prompt_input)
-    row['prompts'] = prompts
-    row['status'] = 'Prompt ready'
+    """Prepare NotebookLM source text and reset prompts."""
+    pieces: list[str] = []
+    story = row.get('story') or ''
+    if story:
+        pieces.append(f"Historia: {story}")
+    names = row.get('character_names') or []
+    if names:
+        pieces.append("Personajes: " + ', '.join(names))
+    photos = row.get('photos') or []
+    if photos:
+        pieces.append("Fotos de referencia: " + ', '.join(photos))
+    row['notebook_text'] = '\n'.join(pieces)
+    row['prompts'] = []
+    row['status'] = 'Pending to NotebookLM'
 
 
 def parse_orders(temp_path: Path) -> list[dict]:
@@ -198,6 +177,9 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'voice_seed': str(_val(data, COL_ALIASES['voice_seed']) or ''),
             'voice_text': str(_val(data, COL_ALIASES['voice_text']) or ''),
             'voice_sample': str(_val(data, COL_ALIASES['voice_sample']) or ''),
+            'story': str(_val(data, COL_ALIASES['story']) or ''),
+            'character_names': [n.strip() for n in str(_val(data, COL_ALIASES['character_names']) or '').split(',') if n.strip()],
+            'photos': [p.strip() for p in str(_val(data, COL_ALIASES['photos']) or '').split(',') if p.strip()],
         }
         row['pages'] = pages_for_cover(row['cover'])
         rows.append(row)
@@ -445,6 +427,35 @@ async def open_storybook(row: dict, client: Client) -> None:
             ui.notify(f'Error preparando libro: {e}', type='negative')
 
 
+async def open_notebooklm(row: dict, client: Client) -> None:
+    try:
+        text = row.get('notebook_text', '')
+        if text:
+            pyperclip.copy(text)
+        webbrowser.open('https://notebooklm.google.com/notebook', new=2)
+        row['status'] = 'Pending to Storybook'
+        with client:
+            refresh_table()
+            ui.notify('Texto copiado para NotebookLM')
+    except Exception as e:
+        with client:
+            ui.notify(f'Error abriendo NotebookLM: {e}', type='negative')
+
+
+async def save_prompts(row: dict, client: Client) -> None:
+    try:
+        text = pyperclip.paste()
+        prompts = [p.strip() for p in text.split('\n---\n') if p.strip()]
+        row['prompts'] = prompts
+        row['status'] = 'ready to generate Book'
+        with client:
+            refresh_table()
+            ui.notify('Prompts guardados')
+    except Exception as e:
+        with client:
+            ui.notify(f'Error guardando prompts: {e}', type='negative')
+
+
 def mark_done(row: dict) -> None:
     row['status'] = 'DONE'
     refresh_table()
@@ -474,7 +485,13 @@ def main_page() -> None:
     <q-td :props="props">
       <div class='row items-center q-gutter-sm'>
         <span>{{ props.row.status }}</span>
-        <q-btn v-if="props.row.status === 'Prompt ready'"
+        <q-btn v-if="props.row.status === 'Pending to NotebookLM'"
+               label="NotebookLM"
+               @click="() => emit('open_notebooklm', props.row.id)"/>
+        <q-btn v-else-if="props.row.status === 'Pending to Storybook'"
+               label="Guardar Prompts"
+               @click="() => emit('save_prompts', props.row.id)"/>
+        <q-btn v-else-if="props.row.status === 'ready to generate Book'"
                label="Generar Libro"
                @click="() => emit('open_storybook', props.row.id)"/>
         <q-btn v-else-if="props.row.status === 'Pending yo revise PDF'"
@@ -489,6 +506,8 @@ def main_page() -> None:
         rid = e.args if isinstance(e.args, str) else e.args[0]
         return next(r for r in ORDERS if r['id'] == rid)
 
+    table.on('open_notebooklm', lambda e: asyncio.create_task(open_notebooklm(_row_from_event(e), e.client)))
+    table.on('save_prompts', lambda e: asyncio.create_task(save_prompts(_row_from_event(e), e.client)))
     table.on('open_storybook', lambda e: asyncio.create_task(open_storybook(_row_from_event(e), e.client)))
     table.on('mark_done', lambda e: mark_done(_row_from_event(e)))
     import_block()

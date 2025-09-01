@@ -81,33 +81,48 @@ def _place_buttons() -> None:
             return
         x, y, w, h = bbox[0], bbox[1], bbox[2], bbox[3]
         buttons: list[Button] = []
-        premium = (
-            row.get('cover', '').lower() == 'premium hardcover'
-            and len(row.get('prompts', [])) > 1
-        )
-        if premium:
-            half = w // 2
-            btn1 = Button(
+        status = row.get('status', '')
+        premium = row.get('cover', '').lower() == 'premium hardcover'
+        if status == 'Pending to NotebookLM':
+            btn = Button(
                 tree,
-                text='Generar Libro',
-                command=lambda rid=row['id']: generate_order(rid),
+                text='NotebookLM',
+                command=lambda rid=row['id']: open_notebooklm(rid),
             )
-            btn1.place(x=x, y=y, width=half, height=h)
-            btn2 = Button(
+            btn.place(x=x, y=y, width=w, height=h)
+            buttons.append(btn)
+        elif status == 'Pending to Storybook':
+            btn = Button(
                 tree,
-                text='Copiar Prompt 2',
-                command=lambda rid=row['id']: copy_prompt2(rid),
+                text='Guardar Prompts',
+                command=lambda rid=row['id']: save_prompts(rid),
             )
-            btn2.place(x=x + half, y=y, width=w - half, height=h)
-            buttons.extend([btn1, btn2])
-        else:
-            btn1 = Button(
-                tree,
-                text='Generar Libro',
-                command=lambda rid=row['id']: generate_order(rid),
-            )
-            btn1.place(x=x, y=y, width=w, height=h)
-            buttons.append(btn1)
+            btn.place(x=x, y=y, width=w, height=h)
+            buttons.append(btn)
+        elif status == 'ready to generate Book':
+            if premium and len(row.get('prompts', [])) > 1:
+                half = w // 2
+                btn1 = Button(
+                    tree,
+                    text='Generar Libro',
+                    command=lambda rid=row['id']: generate_order(rid),
+                )
+                btn1.place(x=x, y=y, width=half, height=h)
+                btn2 = Button(
+                    tree,
+                    text='Copiar Prompt 2',
+                    command=lambda rid=row['id']: copy_prompt2(rid),
+                )
+                btn2.place(x=x + half, y=y, width=w - half, height=h)
+                buttons.extend([btn1, btn2])
+            else:
+                btn1 = Button(
+                    tree,
+                    text='Generar Libro',
+                    command=lambda rid=row['id']: generate_order(rid),
+                )
+                btn1.place(x=x, y=y, width=w, height=h)
+                buttons.append(btn1)
         ROW_BUTTONS[row['id']] = buttons
 
 
@@ -125,6 +140,27 @@ def copy_prompt2(row_id: str) -> None:
     if len(row.get('prompts', [])) > 1:
         pyperclip.copy(row['prompts'][1])
         messagebox.showinfo('Listo', 'Prompt 2 copiado al portapapeles')
+
+
+def open_notebooklm(row_id: str) -> None:
+    row = next(r for r in ORDERS if r['id'] == row_id)
+    text = row.get('notebook_text', '')
+    if text:
+        pyperclip.copy(text)
+    webbrowser.open('https://notebooklm.google.com/notebook', new=2)
+    row['status'] = 'Pending to Storybook'
+    refresh_table()
+    messagebox.showinfo('Listo', 'Texto copiado para NotebookLM')
+
+
+def save_prompts(row_id: str) -> None:
+    row = next(r for r in ORDERS if r['id'] == row_id)
+    text = pyperclip.paste()
+    prompts = [p.strip() for p in text.split('\n---\n') if p.strip()]
+    row['prompts'] = prompts
+    row['status'] = 'ready to generate Book'
+    refresh_table()
+    messagebox.showinfo('Listo', 'Prompts guardados')
 
 root = Tk()
 root.title('Endless Chapters')
