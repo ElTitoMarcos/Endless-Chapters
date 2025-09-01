@@ -119,8 +119,7 @@ def _val(data: dict, names: Iterable[str]) -> Any:
         if n in data and pd.notna(data[n]):
             return data[n]
     return None
-
-
+  
 def books_for_cover(cover: str) -> int:
     return 2 if cover.lower() == 'premium hardcover' else 1
 
@@ -165,7 +164,6 @@ def generate_prompts(row: dict) -> None:
     row['prompts'] = prompts
     row['status'] = 'Prompt ready'
 
-
 def parse_orders(temp_path: Path) -> list[dict]:
     if temp_path.suffix.lower() in {'.xlsx', '.xls'}:
         df = pd.read_excel(temp_path)
@@ -193,6 +191,7 @@ def parse_orders(temp_path: Path) -> list[dict]:
             'voice_text': str(_val(data, COL_ALIASES['voice_text']) or ''),
             'voice_sample': str(_val(data, COL_ALIASES['voice_sample']) or ''),
         }
+        row['pages'] = pages_for_cover(row['cover'])
         rows.append(row)
     return rows
 
@@ -388,8 +387,8 @@ def api_key_block() -> None:
 
         ui.button('Verificar', on_click=verify)
 
-
 async def load_sample_orders() -> None:
+
     samples = [
         {'order': '1001', 'client': 'Ana', 'email': 'ana@example.com',
          'cover': 'Premium Hardcover', 'personalized_characters': 0,
@@ -506,6 +505,8 @@ def main_page() -> None:
             ui.button('EXPORTAR CSV', on_click=lambda: ui.download('/api/export.csv'))
             ui.button('REFRESCAR', on_click=refresh_table)
             ui.button('Cargar pedidos de prueba', on_click=lambda: ui.run_async(load_sample_orders()))
+
+    api_key_block()
 
     api_key_block()
 
